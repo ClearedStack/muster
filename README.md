@@ -20,7 +20,9 @@ Muster is a control-plane service of the ClearedStack platform. ClearedStack is 
 
 | Path | What it is |
 | --- | --- |
-| [`SPEC.md`](SPEC.md) | The specification: what Muster does, its interfaces, how it fails and how it is kept safe. The section **Contract v1** was added during the first build. |
+| [`SPEC.md`](SPEC.md) | The specification: what Muster does, its interfaces, how it fails and how it is kept safe. |
+| [`contract/v1/CONTRACT.md`](contract/v1/CONTRACT.md) | The contract: every call, state, queue step and refusal, exactly. Build a worker against this. |
+| [`contract/v1/examples/`](contract/v1/examples) | One saved example for each call and each refusal, replayed by a test. |
 | [`PROMPT.md`](PROMPT.md) | The prompt the build session was started with. It says what to build and the rules to build it under. |
 | [`component.json`](component.json) | This component’s entry in the ClearedStack naming registry. |
 | [`cmd/muster`](cmd/muster) | The program. |
@@ -53,32 +55,33 @@ Muster is a control-plane service of the ClearedStack platform. ClearedStack is 
 Everything below is built, and each rule has saved examples that fail if the behaviour changes.
 
 - **The five worker calls.** A worker leases its next step, keeps the lease with heartbeats, and ends it with complete, fail or needs_subtool. Work is offered urgent first, then normal, then backfill, and in order of arrival within a lane.
-- **The fourteen item states.** Only the moves in the specification's table are allowed, and each worker can make only its own. A refused move changes nothing.
+- **The fourteen item states.** Only the moves in the contract's table are allowed, and each worker can make only its own. A refused move changes nothing.
 - **State and queue together.** A change of state and the next queue step are written in one transaction, or neither is.
+- **Results passed on.** Each worker's result reaches every later worker under that worker's name.
 - **Leases that expire.** A step whose lease runs out is offered again. A finished result that arrives late is still kept if nobody else has taken the step.
 - **Repeats.** A worker that repeats a call it was never told had succeeded gets the same answer, and nothing happens twice.
+- **Recording candidates.** Trawl or Conn records a find as an item, once. An address already on record changes nothing and the answer names the item that has it.
 - **Pause and replay.** An item with no rule is paused. When Shipkeeper reports a new image digest for the worker that paused it, the item runs again in the urgent lane.
+- **Incidents.** An item that is stopped or paused gets one step for Bellbuoy saying which worker, which code and which state.
+- **Release.** The owner's decision, passed on by Countersign, returns a stopped item to the urgent lane in the state it was stopped in.
+- **Checks on live items.** Every live item comes to Tidegauge every seven days, in the backfill lane. A check can leave it live or retire it.
 - **Health reports.** A report is a closed form with no free-text field, so it cannot carry a node name or an address.
 - **The live feed.** Queue depths, component health and edit status changes, as Server-Sent Events, in one batch every five seconds.
-- **Edit intake, checks 1 to 4.** Proof of work, honeypot, a daily-salted rate limit that never stores an address, and the shape and size check with markup stripped. What passes is kept as `pending_approval` and queued for Countersign. Check 5, the owner's approval, happens there: Countersign leases the proposal and completes it as approved or declined.
+- **Edit intake, checks 1 to 4.** Proof of work, honeypot, a daily-salted rate limit that never stores an address, and the shape and size check with markup stripped. What passes is kept as `pending_approval` and queued for Countersign. Check 5, the owner's approval, happens there. An approved proposal goes live when Shipkeeper reports a new digest for its repository.
 - **Identity.** Every caller presents its Kubernetes ServiceAccount token, and each may make only its own calls.
-- **Three error codes.** Every refusal is one of a fixed list of 22 sentences with one of the three codes. None is built from request data.
+- **Refusals.** Every refusal is a status, one of the three codes, a cause a program can act on and a reason for a person, all from a fixed list of 26. None is built from request data.
 - **Small and unprivileged.** One static binary that writes nothing to disk. Under the load test it peaks at about 38 MiB of the 48 MiB budget, most of it the stand-in’s copy of the records; idle it holds about 7 MiB.
 
 ## Not yet done
 
 - **A real Logbook.** Muster talks to Logbook through a small interface ([`internal/logbook`](internal/logbook/logbook.go)). The only thing behind it today is a stand-in that keeps everything in memory and loses it when the process stops. The SQL adapter, and with it the append-only ledger kept in full, are not built, because Logbook's tables do not exist yet. The stand-in keeps only the most recent 2,048 ledger lines.
-- **Creating items.** None of the five calls records a new candidate. The stand-in can be started with a file of made-up items; nothing else can add one.
-- **Tidegauge's work.** Its moves are in the state table, but no queue step is defined for a scheduled check, so Tidegauge is always told there is nothing to lease.
-- **Bellbuoy's routing of failures and paused items.** Only its step for approved edits is built.
-- **A proposal's last step,** from `building` to `live`. Nothing says who reports it.
-- **Releasing an item stopped by `E_PARSE`.** It is held and never offered again.
+- **Four of Tidegauge's moves.** `live` to `building`, and `parked`, `linked` or `merged` back to `observed`, are in the state table and have no next worker defined, so they are refused.
 - **The identity check against a real cluster.** It is tested against saved answers from a stand-in for the Kubernetes API, not against a cluster.
-- **Three duties named on other pages and not in `SPEC.md`:** rejecting raw Sextant pages bound for Moldloft, requiring a written reason for an override, and routing the owner's install, upgrade, pause and rollback actions.
+- **Three duties named on other pages and not in `SPEC.md` or the contract:** rejecting raw Sextant pages bound for Moldloft, requiring a written reason for an override, and routing the owner's install, upgrade, pause and rollback actions.
 - **Kubernetes manifests.** None is included. The form Shipkeeper expects is not specified.
 - **The image has not been pushed or signed.** `ko build` was run without pushing and produced a 3.5 MiB image whose user is not root.
 
-`SPEC.md` lists the open questions behind most of these.
+`SPEC.md` lists the open questions behind these, and the choices the contract left to the build.
 
 ## Run it
 
@@ -113,6 +116,16 @@ curl -s -X POST localhost:8080/v1/complete \
 # {"id":"PA-0003","state":"observed","next":"assay"}
 ```
 
+Be Trawl and record a new find:
+
+```sh
+curl -s -X POST localhost:8080/v1/items \
+  -H 'Authorization: Bearer made-up-token-for-trawl' \
+  -H 'Content-Type: application/json' \
+  -d '{"contract":"v1","source":"sam-gov","title":"A made-up notice","address":"https://example.org/made-up/notice-1"}'
+# {"id":"PA-0009","state":"discovered","next":"trawl"}
+```
+
 Be Conn and watch the feed:
 
 ```sh
@@ -135,7 +148,7 @@ All settings come from the environment. One that is missing where it is required
 | `MUSTER_FEED_SECONDS` | `5` | How often the feed sends a batch; at most 10 |
 | `MUSTER_STORE_SECONDS` | `5` | How long a call may wait for Logbook before answering `E_TIMEOUT` |
 | `MUSTER_POW_BITS` | `20` | Zero bits the proof of work must show |
-| `MUSTER_EDIT_DAILY_CAP` | `5` | Edit submissions kept per source per day |
+| `MUSTER_EDIT_DAILY_CAP` | `5` | Submissions kept per visitor per day, edit proposals and site-form candidates together |
 
 ### Build the image
 
@@ -154,10 +167,11 @@ The saved examples are the record of how Muster behaves:
 
 | Where | What is saved |
 | --- | --- |
-| [`internal/httpapi/testdata/cases/`](internal/httpapi/testdata/cases) | 23 short stories, one per rule. Each is a list of calls with the exact status and body expected back. Start here to see what a call does. |
-| [`internal/lifecycle/testdata/tables.json`](internal/lifecycle/testdata/tables.json) | Every state, move, lane and queue step. A second test checks these against the tables in `SPEC.md`. |
+| [`contract/v1/examples/`](contract/v1/examples) | One file for each call and each refusal in the contract: the request, without the token, and the exact status and body expected. The test fails if a call or a refusal has no example. |
+| [`internal/httpapi/testdata/cases/`](internal/httpapi/testdata/cases) | 29 short stories, one per rule. Each is a list of calls in order with the exact status and body expected back. Start here to see how the calls work together. |
+| [`internal/lifecycle/testdata/tables.json`](internal/lifecycle/testdata/tables.json) | Every state, move, lane and queue step. A second test checks these against the tables in the contract. |
 | [`internal/contract/testdata/refusals.json`](internal/contract/testdata/refusals.json) | Every refusal Muster can give. |
-| [`internal/intake/testdata/`](internal/intake/testdata) | Markup stripping, proof-of-work tokens and source-address hashes. The tokens and hashes were computed outside Muster's own code. |
+| [`internal/intake/testdata/`](internal/intake/testdata) | Markup stripping, proof-of-work tokens and address hashes. The tokens and hashes were computed outside Muster's own code. |
 | [`internal/feed/testdata/stream.txt`](internal/feed/testdata/stream.txt) | The exact bytes a feed subscriber is sent. |
 | [`internal/queue/testdata/ledger.jsonl`](internal/queue/testdata/ledger.jsonl) | The ledger lines one short story writes. |
 | [`internal/auth/testdata/`](internal/auth/testdata) | The identity question Muster sends the cluster, and saved answers. |
@@ -174,9 +188,9 @@ All data in the tests is made up: the items, the tokens, the proposals and the a
 | `internal/contract` | The contract version, the three codes and the fixed list of refusals |
 | `internal/lifecycle` | The tables: states, moves, lanes and queue steps |
 | `internal/logbook` | The interface Logbook sits behind, and `memory`, the stand-in |
-| `internal/queue` | Lease, heartbeat, complete, fail, needs_subtool and replay |
+| `internal/queue` | Lease, heartbeat, complete, fail, needs_subtool, replay, incidents and release |
 | `internal/health` | Shipkeeper's reports |
-| `internal/intake` | The edit checks: puzzle, honeypot, rate limit, stripping, ownership map |
+| `internal/intake` | The edit checks (puzzle, honeypot, rate limit, stripping, ownership map) and the recording of candidates |
 | `internal/feed` | The live feed |
 | `internal/auth` | Who is calling |
 | `internal/httpapi` | The HTTP surface |
