@@ -1,0 +1,11 @@
+{"seq":1,"at":"2026-01-05T09:00:00Z","actor":"sextant","action":"lease","subject":"PA-0001","from":"recorded","to":"recorded"}
+{"seq":2,"at":"2026-01-05T09:00:10Z","actor":"sextant","action":"complete","subject":"PA-0001","from":"recorded","to":"observed"}
+{"seq":3,"at":"2026-01-05T09:00:20Z","actor":"sextant","action":"lease","subject":"PA-0002","from":"recorded","to":"recorded"}
+{"seq":4,"at":"2026-01-05T09:00:30Z","actor":"sextant","action":"fail","subject":"PA-0002","from":"recorded","to":"recorded","code":"E_TIMEOUT"}
+{"seq":5,"at":"2026-01-05T09:00:40Z","actor":"sextant","action":"lease","subject":"PA-0002","from":"recorded","to":"recorded"}
+{"seq":6,"at":"2026-01-05T09:00:50Z","actor":"sextant","action":"fail","subject":"PA-0002","from":"recorded","to":"recorded","code":"E_PARSE"}
+{"seq":7,"at":"2026-01-05T09:00:50Z","actor":"sextant","action":"incident","subject":"PA-0002","from":"recorded","to":"recorded","code":"E_PARSE"}
+{"seq":8,"at":"2026-01-05T09:01:00Z","actor":"sextant","action":"lease","subject":"PA-0003","from":"recorded","to":"recorded"}
+{"seq":9,"at":"2026-01-05T09:01:10Z","actor":"sextant","action":"needs_subtool","subject":"PA-0003","from":"recorded","to":"needs_subtool","code":"E_NEEDS_SUBTOOL"}
+{"seq":10,"at":"2026-01-05T09:01:10Z","actor":"sextant","action":"incident","subject":"PA-0003","from":"recorded","to":"recorded","code":"E_NEEDS_SUBTOOL"}
+{"seq":11,"at":"2026-01-05T09:01:20Z","actor":"sextant","action":"replay","subject":"PA-0003","from":"needs_subtool","to":"recorded"}

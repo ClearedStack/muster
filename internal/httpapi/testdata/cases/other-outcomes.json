@@ -1,0 +1,393 @@
+{
+  "about": "The moves that are not the straight line: rejected at intake, screened out and overridden, parked, linked, merged and rejected by the owner, parked during checks.",
+  "seed": {
+    "items": [
+      {
+        "id": "PA-0001",
+        "state": "discovered",
+        "lane": "normal",
+        "next": "trawl"
+      },
+      {
+        "id": "PA-0002",
+        "state": "observed",
+        "lane": "normal",
+        "next": "assay"
+      },
+      {
+        "id": "PA-0003",
+        "state": "scored",
+        "lane": "normal",
+        "next": "countersign"
+      },
+      {
+        "id": "PA-0004",
+        "state": "scored",
+        "lane": "normal",
+        "next": "countersign"
+      },
+      {
+        "id": "PA-0005",
+        "state": "scored",
+        "lane": "normal",
+        "next": "countersign"
+      },
+      {
+        "id": "PA-0006",
+        "state": "scored",
+        "lane": "normal",
+        "next": "countersign"
+      },
+      {
+        "id": "PA-0007",
+        "state": "building",
+        "lane": "normal",
+        "next": "shakedown"
+      }
+    ]
+  },
+  "steps": [
+    {
+      "as": "trawl",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0001.1",
+        "kind": "item",
+        "id": "PA-0001",
+        "state": "discovered",
+        "lane": "normal",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z"
+      }
+    },
+    {
+      "note": "a dead address or a duplicate; no step follows",
+      "as": "trawl",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0001.1",
+        "state": "rejected"
+      },
+      "status": 200,
+      "want": {
+        "id": "PA-0001",
+        "state": "rejected"
+      }
+    },
+    {
+      "as": "assay",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0002.2",
+        "kind": "item",
+        "id": "PA-0002",
+        "state": "observed",
+        "lane": "normal",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z"
+      }
+    },
+    {
+      "note": "waits with Countersign in case the owner overrides",
+      "as": "assay",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0002.2",
+        "state": "screened_out"
+      },
+      "status": 200,
+      "want": {
+        "id": "PA-0002",
+        "state": "screened_out",
+        "next": "countersign"
+      }
+    },
+    {
+      "as": "countersign",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0003.3",
+        "kind": "item",
+        "id": "PA-0003",
+        "state": "scored",
+        "lane": "normal",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z"
+      }
+    },
+    {
+      "note": "no step follows",
+      "as": "countersign",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0003.3",
+        "state": "parked"
+      },
+      "status": 200,
+      "want": {
+        "id": "PA-0003",
+        "state": "parked"
+      }
+    },
+    {
+      "as": "countersign",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0004.4",
+        "kind": "item",
+        "id": "PA-0004",
+        "state": "scored",
+        "lane": "normal",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z"
+      }
+    },
+    {
+      "note": "Chartroom lists the link",
+      "as": "countersign",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0004.4",
+        "state": "linked"
+      },
+      "status": 200,
+      "want": {
+        "id": "PA-0004",
+        "state": "linked",
+        "next": "chartroom"
+      }
+    },
+    {
+      "as": "countersign",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0005.5",
+        "kind": "item",
+        "id": "PA-0005",
+        "state": "scored",
+        "lane": "normal",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z"
+      }
+    },
+    {
+      "as": "countersign",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0005.5",
+        "state": "merged"
+      },
+      "status": 200,
+      "want": {
+        "id": "PA-0005",
+        "state": "merged",
+        "next": "chartroom"
+      }
+    },
+    {
+      "as": "countersign",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0006.6",
+        "kind": "item",
+        "id": "PA-0006",
+        "state": "scored",
+        "lane": "normal",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z"
+      }
+    },
+    {
+      "as": "countersign",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0006.6",
+        "state": "rejected"
+      },
+      "status": 200,
+      "want": {
+        "id": "PA-0006",
+        "state": "rejected"
+      }
+    },
+    {
+      "note": "the screened_out item, which joined Countersign's queue last",
+      "as": "countersign",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0002.7",
+        "kind": "item",
+        "id": "PA-0002",
+        "state": "screened_out",
+        "lane": "normal",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z"
+      }
+    },
+    {
+      "note": "the override sends it back to Assay",
+      "as": "countersign",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0002.7",
+        "state": "observed"
+      },
+      "status": 200,
+      "want": {
+        "id": "PA-0002",
+        "state": "observed",
+        "next": "assay"
+      }
+    },
+    {
+      "as": "chartroom",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0004.8",
+        "kind": "item",
+        "id": "PA-0004",
+        "state": "linked",
+        "lane": "normal",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z"
+      }
+    },
+    {
+      "note": "Chartroom's step leaves the state as it is",
+      "as": "chartroom",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0004.8",
+        "state": "linked"
+      },
+      "status": 200,
+      "want": {
+        "id": "PA-0004",
+        "state": "linked"
+      }
+    },
+    {
+      "as": "chartroom",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0005.9",
+        "kind": "item",
+        "id": "PA-0005",
+        "state": "merged",
+        "lane": "normal",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z"
+      }
+    },
+    {
+      "as": "chartroom",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0005.9",
+        "state": "merged"
+      },
+      "status": 200,
+      "want": {
+        "id": "PA-0005",
+        "state": "merged"
+      }
+    },
+    {
+      "as": "shakedown",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0007.10",
+        "kind": "item",
+        "id": "PA-0007",
+        "state": "building",
+        "lane": "normal",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z"
+      }
+    },
+    {
+      "note": "the rule turned out to be unclear",
+      "as": "shakedown",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0007.10",
+        "state": "parked"
+      },
+      "status": 200,
+      "want": {
+        "id": "PA-0007",
+        "state": "parked"
+      }
+    }
+  ]
+}

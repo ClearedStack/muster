@@ -1,0 +1,59 @@
+{
+  "about": "Countersign is given a release step: an item a worker stopped with E_PARSE, in the state it is held in, with the worker and the code under results.held.",
+  "given": {
+    "items": [
+      {
+        "id": "PA-0001",
+        "state": "recorded",
+        "lane": "normal",
+        "next": "sextant"
+      }
+    ],
+    "calls": [
+      {
+        "as": "sextant",
+        "method": "POST",
+        "path": "/v1/lease",
+        "body": {
+          "contract": "v1"
+        }
+      },
+      {
+        "as": "sextant",
+        "method": "POST",
+        "path": "/v1/fail",
+        "body": {
+          "contract": "v1",
+          "lease": "PA-0001.1",
+          "code": "E_PARSE"
+        }
+      }
+    ]
+  },
+  "request": {
+    "as": "countersign",
+    "method": "POST",
+    "path": "/v1/lease",
+    "body": {
+      "contract": "v1"
+    }
+  },
+  "expect": {
+    "status": 200,
+    "body": {
+      "lease": "release:PA-0001.2",
+      "kind": "release",
+      "id": "PA-0001",
+      "state": "recorded",
+      "lane": "normal",
+      "attempt": 1,
+      "expires": "2026-01-05T09:01:00Z",
+      "results": {
+        "held": {
+          "worker": "sextant",
+          "code": "E_PARSE"
+        }
+      }
+    }
+  }
+}

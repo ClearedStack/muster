@@ -1,0 +1,220 @@
+{
+  "about": "Every caller presents a token, and each may make only its own calls. Nothing outside the listed calls exists.",
+  "steps": [
+    {
+      "note": "no token",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 401,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "no_credential",
+        "reason": "no valid credential was presented"
+      }
+    },
+    {
+      "note": "a token nobody was given",
+      "token": "made-up-token-nobody-has",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 401,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "no_credential",
+        "reason": "no valid credential was presented"
+      }
+    },
+    {
+      "note": "Conn is not a worker",
+      "as": "conn",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 403,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "not_your_call",
+        "reason": "this caller may not make this call"
+      }
+    },
+    {
+      "as": "shipkeeper",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 403,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "not_your_call",
+        "reason": "this caller may not make this call"
+      }
+    },
+    {
+      "note": "a worker may not report health",
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/health",
+      "send": {
+        "contract": "v1",
+        "reports": []
+      },
+      "status": 403,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "not_your_call",
+        "reason": "this caller may not make this call"
+      }
+    },
+    {
+      "as": "conn",
+      "method": "POST",
+      "path": "/v1/health",
+      "send": {
+        "contract": "v1",
+        "reports": []
+      },
+      "status": 403,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "not_your_call",
+        "reason": "this caller may not make this call"
+      }
+    },
+    {
+      "note": "a worker may not submit an edit proposal",
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/edits",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 403,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "not_your_call",
+        "reason": "this caller may not make this call"
+      }
+    },
+    {
+      "as": "shipkeeper",
+      "method": "POST",
+      "path": "/v1/edits",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 403,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "not_your_call",
+        "reason": "this caller may not make this call"
+      }
+    },
+    {
+      "note": "only Trawl and Conn may record a candidate",
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/items",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 403,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "not_your_call",
+        "reason": "this caller may not make this call"
+      }
+    },
+    {
+      "as": "shipkeeper",
+      "method": "POST",
+      "path": "/v1/items",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 403,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "not_your_call",
+        "reason": "this caller may not make this call"
+      }
+    },
+    {
+      "note": "a worker may not read the feed",
+      "as": "sextant",
+      "method": "GET",
+      "path": "/v1/feed",
+      "status": 403,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "not_your_call",
+        "reason": "this caller may not make this call"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/v1/feed",
+      "status": 401,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "no_credential",
+        "reason": "no valid credential was presented"
+      }
+    },
+    {
+      "note": "the wrong method",
+      "as": "sextant",
+      "method": "GET",
+      "path": "/v1/lease",
+      "status": 405,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "wrong_method",
+        "reason": "this call does not accept that method"
+      }
+    },
+    {
+      "note": "no such call",
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/made-up",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 404,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "no_such_call",
+        "reason": "no such call"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/",
+      "status": 404,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "no_such_call",
+        "reason": "no such call"
+      }
+    },
+    {
+      "note": "the one call that needs no token",
+      "method": "GET",
+      "path": "/healthz",
+      "status": 200,
+      "want": {
+        "status": "ok"
+      }
+    }
+  ]
+}

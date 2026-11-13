@@ -1,0 +1,139 @@
+{
+  "about": "A worker repeats a call until it is acknowledged. Repeating a completion gives the same answer and does nothing twice.",
+  "seed": {
+    "items": [
+      {
+        "id": "PA-0001",
+        "state": "recorded",
+        "lane": "normal",
+        "next": "sextant"
+      }
+    ]
+  },
+  "steps": [
+    {
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0001.1",
+        "kind": "item",
+        "id": "PA-0001",
+        "state": "recorded",
+        "lane": "normal",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z"
+      }
+    },
+    {
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0001.1",
+        "state": "observed",
+        "result": {
+          "job": "made-up job"
+        }
+      },
+      "status": 200,
+      "want": {
+        "id": "PA-0001",
+        "state": "observed",
+        "next": "assay"
+      }
+    },
+    {
+      "note": "the same call again: the same answer",
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0001.1",
+        "state": "observed",
+        "result": {
+          "job": "made-up job"
+        }
+      },
+      "status": 200,
+      "want": {
+        "id": "PA-0001",
+        "state": "observed",
+        "next": "assay"
+      }
+    },
+    {
+      "note": "the same lease with a different outcome is refused",
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0001.1",
+        "state": "recorded"
+      },
+      "status": 409,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "lease_not_held",
+        "reason": "the lease is not held"
+      }
+    },
+    {
+      "note": "and so is another worker using that lease",
+      "as": "assay",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0001.1",
+        "state": "observed"
+      },
+      "status": 409,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "lease_not_held",
+        "reason": "the lease is not held"
+      }
+    },
+    {
+      "note": "the item was queued for Assay once, not twice",
+      "as": "assay",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0001.2",
+        "kind": "item",
+        "id": "PA-0001",
+        "state": "observed",
+        "lane": "normal",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z",
+        "results": {
+          "sextant": {
+            "job": "made-up job"
+          }
+        }
+      }
+    },
+    {
+      "as": "assay",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 204
+    }
+  ]
+}

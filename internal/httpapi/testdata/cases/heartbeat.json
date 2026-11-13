@@ -1,0 +1,112 @@
+{
+  "about": "A heartbeat moves the end of a lease to one lease length from now. Only the worker holding the lease may send it.",
+  "seed": {
+    "items": [
+      {
+        "id": "PA-0001",
+        "state": "recorded",
+        "lane": "normal",
+        "next": "sextant"
+      }
+    ]
+  },
+  "steps": [
+    {
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0001.1",
+        "kind": "item",
+        "id": "PA-0001",
+        "state": "recorded",
+        "lane": "normal",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z"
+      }
+    },
+    {
+      "note": "45 seconds in: the lease now ends 60 seconds from here",
+      "wait": "45s",
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/heartbeat",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0001.1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0001.1",
+        "expires": "2026-01-05T09:01:45Z"
+      }
+    },
+    {
+      "note": "another worker's lease is not held by this one",
+      "as": "assay",
+      "method": "POST",
+      "path": "/v1/heartbeat",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0001.1"
+      },
+      "status": 409,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "lease_not_held",
+        "reason": "the lease is not held"
+      }
+    },
+    {
+      "note": "a lease that was never given",
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/heartbeat",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0001.2"
+      },
+      "status": 409,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "lease_not_held",
+        "reason": "the lease is not held"
+      }
+    },
+    {
+      "note": "something that is not a lease at all",
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/heartbeat",
+      "send": {
+        "contract": "v1",
+        "lease": "not-a-lease"
+      },
+      "status": 409,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "lease_not_held",
+        "reason": "the lease is not held"
+      }
+    },
+    {
+      "note": "no lease named",
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/heartbeat",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 400,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "missing_field",
+        "reason": "a required field is missing"
+      }
+    }
+  ]
+}

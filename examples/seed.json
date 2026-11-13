@@ -1,0 +1,12 @@
+{
+  "items": [
+    {"id": "PA-0001", "state": "discovered", "lane": "normal", "next": "trawl"},
+    {"id": "PA-0002", "state": "recorded", "lane": "normal", "next": "sextant"},
+    {"id": "PA-0003", "state": "recorded", "lane": "urgent", "next": "sextant"},
+    {"id": "PA-0004", "state": "observed", "lane": "backfill", "next": "assay"},
+    {"id": "PA-0005", "state": "scored", "lane": "normal", "next": "countersign"},
+    {"id": "PA-0006", "state": "approved", "lane": "normal", "next": "waybill"},
+    {"id": "PA-0007", "state": "building", "lane": "normal", "next": "shakedown"},
+    {"id": "PA-0008", "state": "live", "lane": "normal"}
+  ]
+}

@@ -2,7 +2,7 @@
 
 > Central queue lease manager, state-transition gatekeeper, SSE live feed publisher, and 5-layer anti-spam edit intake in the clearedstack namespace.
 
-**Status: design.** This is a specification. It describes how Muster is meant to work, not something that exists yet.
+**Status: design, with a first build.** This is a specification. It describes how Muster is meant to work. A first build exists in this repository; the [README](README.md) says what it does today and what it does not.
 
 The same text is published at [clearedstack.com/platform/muster/](https://clearedstack.com/platform/muster/). To change the specification, change it here and say why.
 
@@ -63,6 +63,51 @@ Every anonymous `✎ Edit` submission must pass all five layers before reaching 
 - **No Public Ingress:** Blocked from direct internet access by default-deny `NetworkPolicy`; only Conn forwards sanitized intake requests.
 - **No Automatic Cluster Writes from Public Edits:** Anonymous proposals cannot touch Plainforge or running pods; they remain isolated in `pending_approval` until owner approval.
 - **Unprivileged Execution:** Runs as non-root with dropped Linux capabilities and no privilege escalation.
+
+## Contract v1
+
+The calls, the states, the queue and the refusals are defined in [`contract/v1/CONTRACT.md`](contract/v1/CONTRACT.md), with one saved example for each call and each refusal in [`contract/v1/examples/`](contract/v1/examples). The sections above name these things; the contract defines them. Where the two differ in detail, the contract is what the build follows, and the change log below says why.
+
+## Open questions
+
+These could not be settled from the published pages or the contract. The build does not guess at them; the README lists each as not yet done.
+
+1. **Four of Tidegauge's moves.** Every live item now comes to Tidegauge for a check every seven days, and a check can leave it live or retire it. The other moves in the state table have no next worker: `live` to `building`, and `parked`, `linked` or `merged` back to `observed`. Nothing says which worker follows, or how Tidegauge comes to hold a parked, linked or merged item.
+2. **Which worker pauses a `recorded` item.** The lifecycle table says intake has no rule for the source, which points at Trawl, but Trawl holds items in `discovered`, which has no move to `needs_subtool`. The build follows the state table: Sextant can pause a `recorded` item and Trawl cannot pause anything.
+3. **Health states.** Shipkeeper's page says it sends `healthy`, `idle`, `degraded` and `paused`. The operations page lists six display states: `healthy`, `idle`, `erroring`, `recovering`, `stale` and `empty`. The build accepts and republishes the four Shipkeeper sends, unchanged, and leaves the mapping to Conn.
+4. **Duties named on other pages only.** The pipeline page says the hub rejects any message to Moldloft that carries a raw page captured by Sextant, without saying how one is recognised. Countersign's page says Muster rejects an override with no written reason. Shipkeeper's page says the owner's install, upgrade, pause and rollback actions are routed through Muster. None of these is in this specification or the contract, and none is built.
+5. **The hub repository.** `ownership_map.json` is said to live in "the hub repository". This specification assumes that is not Muster's concern: Muster is given the ownership map as a file.
+6. **A `DATA` edit.** A proposal goes live when Shipkeeper reports a new digest for its repository. A `DATA` edit changes a record and may never cause a new image, so it would wait in `building` for the next unrelated deploy of that repository.
+
+Choices the contract left to the build, each easy to change and each pinned by a saved example:
+
+- **The cause `duplicate`** is used in one place: a batch of health reports that names the same component twice.
+- **A slow identity check** answers `503` with the cause `busy`, since `store_slow` would name the wrong thing.
+- **A release step** is in the `normal` lane. A decision to keep ends the step, and nothing offers that item again.
+- **The owner's decision on a release step** is written to the ledger and is not kept as `results.countersign`, so it does not replace what Countersign decided about the item earlier.
+- **A new item's lane** follows its source: `web-sweep` starts in `backfill`, the other three in `normal`.
+- **A `site-form` candidate** carries two more fields than the others, `pow` and `visitor`, because the proof of work and the daily limit need them. It shares one daily count with that visitor's edit proposals.
+- **An incident step** is in the `normal` lane, and its `state` is the state the item was in when the worker stopped.
+- **A live item with no check recorded,** as in a seed file, is due for one at once.
+- **The 4 KB limit on an edit proposal** is checked with the other shape checks, after the rate limit, now that every body is read up to 64 KiB.
+
+## Changes to this specification
+
+| Change | Reason |
+| --- | --- |
+| Added **Contract v1**: states and moves, lanes, queue steps, the five calls, errors, health reports, the live feed and edit intake | The specification named these and did not define them. A worker cannot be written against a name, and a rule with no definition cannot have a saved example |
+| Followed the lifecycle page's table over its figure | They disagree, and the table is the more detailed of the two |
+| Mapped every refusal to an HTTP status plus the nearest of the three codes | Only three public codes are allowed, and an illegal move, an expired lease and a missing credential fit none of them exactly |
+| Required a ServiceAccount token from Conn and Shipkeeper as well as from workers | The interface table lists authentication for workers only, which would let any pod that can reach Muster forge a health report or a proposal |
+| Added `GET /healthz` | A pod needs something the cluster can check |
+| Moved the contract to `contract/v1/CONTRACT.md`, with saved examples beside it | So that the workers, Conn and Shipkeeper have one file to build against, and examples that are replayed against Muster |
+| Spelled the state `screened_out` | One spelling for every state: lower case with underscores |
+| Fixed the form of item and proposal identifiers | So that an identifier has exactly one spelling |
+| Gave every refusal a `cause` | The three codes cannot tell a caller what to do next; the cause can |
+| Added `POST /v1/items` | Nothing could record a new candidate |
+| Raised Waybill's `complete` to 256 KiB and set every other body to 64 KiB | A specification is larger than any other result |
+| Added the seven-day Tidegauge check, Bellbuoy's incident step, the move of a proposal to `live` and Countersign's release step | These were open questions; each now has a rule |
+| Let `complete` take a result for a proposal as it does for an item | One rule for every step a worker completes, and Bellbuoy needs what Countersign decided |
 
 ## Related pages
 

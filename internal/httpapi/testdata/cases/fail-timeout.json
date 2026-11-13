@@ -1,0 +1,122 @@
+{
+  "about": "E_TIMEOUT: something outside took too long. The item stays in the queue, in its place, and can be tried again.",
+  "seed": {
+    "items": [
+      {
+        "id": "PA-0001",
+        "state": "recorded",
+        "lane": "normal",
+        "next": "sextant"
+      },
+      {
+        "id": "PA-0002",
+        "state": "recorded",
+        "lane": "normal",
+        "next": "sextant"
+      }
+    ]
+  },
+  "steps": [
+    {
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0001.1",
+        "kind": "item",
+        "id": "PA-0001",
+        "state": "recorded",
+        "lane": "normal",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z"
+      }
+    },
+    {
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/fail",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0001.1",
+        "code": "E_TIMEOUT"
+      },
+      "status": 200,
+      "want": {
+        "id": "PA-0001",
+        "state": "recorded",
+        "next": "sextant"
+      }
+    },
+    {
+      "note": "the same call again: the same answer",
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/fail",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0001.1",
+        "code": "E_TIMEOUT"
+      },
+      "status": 200,
+      "want": {
+        "id": "PA-0001",
+        "state": "recorded",
+        "next": "sextant"
+      }
+    },
+    {
+      "note": "offered again, ahead of the item that arrived after it; second attempt",
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0001.2",
+        "kind": "item",
+        "id": "PA-0001",
+        "state": "recorded",
+        "lane": "normal",
+        "attempt": 2,
+        "expires": "2026-01-05T09:01:00Z"
+      }
+    },
+    {
+      "note": "a late repeat of the first call still gets its answer, and does not disturb the new lease",
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/fail",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0001.1",
+        "code": "E_TIMEOUT"
+      },
+      "status": 200,
+      "want": {
+        "id": "PA-0001",
+        "state": "recorded",
+        "next": "sextant"
+      }
+    },
+    {
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/heartbeat",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0001.2"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0001.2",
+        "expires": "2026-01-05T09:01:00Z"
+      }
+    }
+  ]
+}

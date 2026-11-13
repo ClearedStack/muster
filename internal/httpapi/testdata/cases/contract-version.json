@@ -1,0 +1,75 @@
+{
+  "about": "Every call says which version of the contract it speaks. A version this build does not know is valid and unfamiliar.",
+  "seed": {
+    "items": [
+      {
+        "id": "PA-0001",
+        "state": "recorded",
+        "lane": "normal",
+        "next": "sextant"
+      }
+    ]
+  },
+  "steps": [
+    {
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v2"
+      },
+      "status": 422,
+      "want": {
+        "error": "E_NEEDS_SUBTOOL",
+        "cause": "unknown_contract",
+        "reason": "this contract version is not known"
+      }
+    },
+    {
+      "note": "no version at all is a malformed call",
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {},
+      "status": 400,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "missing_field",
+        "reason": "a required field is missing"
+      }
+    },
+    {
+      "as": "shipkeeper",
+      "method": "POST",
+      "path": "/v1/health",
+      "send": {
+        "contract": "v0",
+        "reports": []
+      },
+      "status": 422,
+      "want": {
+        "error": "E_NEEDS_SUBTOOL",
+        "cause": "unknown_contract",
+        "reason": "this contract version is not known"
+      }
+    },
+    {
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0001.1",
+        "kind": "item",
+        "id": "PA-0001",
+        "state": "recorded",
+        "lane": "normal",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z"
+      }
+    }
+  ]
+}

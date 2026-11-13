@@ -1,0 +1,275 @@
+{
+  "about": "A candidate is recorded as an item once. A new address becomes a new item in discovered with Trawl's step waiting. A known address changes nothing: the answer names the item that has it.",
+  "seed": {
+    "items": [
+      {
+        "id": "PA-0007",
+        "state": "live",
+        "lane": "normal"
+      },
+      {
+        "id": "PA-0041",
+        "state": "rejected",
+        "lane": "normal"
+      }
+    ]
+  },
+  "steps": [
+    {
+      "note": "a new address: the next number after the highest item on record",
+      "as": "trawl",
+      "method": "POST",
+      "path": "/v1/items",
+      "send": {
+        "contract": "v1",
+        "source": "sam-gov",
+        "title": "A made-up notice about a made-up tool",
+        "address": "https://example.org/made-up/notice-1"
+      },
+      "status": 201,
+      "want": {
+        "id": "PA-0042",
+        "state": "discovered",
+        "next": "trawl"
+      }
+    },
+    {
+      "note": "the same address again, from anyone: the item that has it, and its state",
+      "as": "trawl",
+      "method": "POST",
+      "path": "/v1/items",
+      "send": {
+        "contract": "v1",
+        "source": "sam-gov",
+        "title": "A made-up notice about a made-up tool",
+        "address": "https://example.org/made-up/notice-1"
+      },
+      "status": 200,
+      "want": {
+        "id": "PA-0042",
+        "state": "discovered",
+        "duplicate": true
+      }
+    },
+    {
+      "note": "the title and the source do not matter, only the address",
+      "as": "conn",
+      "method": "POST",
+      "path": "/v1/items",
+      "send": {
+        "contract": "v1",
+        "source": "github-issues",
+        "title": "Another made-up title",
+        "address": "https://example.org/made-up/notice-1"
+      },
+      "status": 200,
+      "want": {
+        "id": "PA-0042",
+        "state": "discovered",
+        "duplicate": true
+      }
+    },
+    {
+      "note": "addresses are compared exactly as sent",
+      "as": "trawl",
+      "method": "POST",
+      "path": "/v1/items",
+      "send": {
+        "contract": "v1",
+        "source": "sam-gov",
+        "title": "A made-up notice about a made-up tool",
+        "address": "https://example.org/made-up/notice-1/"
+      },
+      "status": 201,
+      "want": {
+        "id": "PA-0043",
+        "state": "discovered",
+        "next": "trawl"
+      }
+    },
+    {
+      "note": "a bulk find from a sweep starts in the backfill lane",
+      "as": "trawl",
+      "method": "POST",
+      "path": "/v1/items",
+      "send": {
+        "contract": "v1",
+        "source": "web-sweep",
+        "title": "A made-up notice about a made-up tool",
+        "address": "https://example.org/made-up/swept-1",
+        "result": {
+          "seen": "made-up page"
+        }
+      },
+      "status": 201,
+      "want": {
+        "id": "PA-0044",
+        "state": "discovered",
+        "next": "trawl"
+      }
+    },
+    {
+      "note": "markup is stripped from the title",
+      "as": "trawl",
+      "method": "POST",
+      "path": "/v1/items",
+      "send": {
+        "contract": "v1",
+        "source": "github-issues",
+        "title": "Use <b>bold</b> <script>made_up()</script>titles",
+        "address": "https://example.org/made-up/issue-1"
+      },
+      "status": 201,
+      "want": {
+        "id": "PA-0045",
+        "state": "discovered",
+        "next": "trawl"
+      }
+    },
+    {
+      "note": "normal before backfill, in order of arrival",
+      "as": "trawl",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0042.1",
+        "kind": "item",
+        "id": "PA-0042",
+        "state": "discovered",
+        "lane": "normal",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z",
+        "found": {
+          "source": "sam-gov",
+          "title": "A made-up notice about a made-up tool",
+          "address": "https://example.org/made-up/notice-1"
+        }
+      }
+    },
+    {
+      "as": "trawl",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0042.1",
+        "state": "recorded",
+        "result": {
+          "cleaned": "made-up"
+        }
+      },
+      "status": 200,
+      "want": {
+        "id": "PA-0042",
+        "state": "recorded",
+        "next": "sextant"
+      }
+    },
+    {
+      "note": "the known address now reports the item's new state",
+      "as": "trawl",
+      "method": "POST",
+      "path": "/v1/items",
+      "send": {
+        "contract": "v1",
+        "source": "sam-gov",
+        "title": "A made-up notice about a made-up tool",
+        "address": "https://example.org/made-up/notice-1"
+      },
+      "status": 200,
+      "want": {
+        "id": "PA-0042",
+        "state": "recorded",
+        "duplicate": true
+      }
+    },
+    {
+      "as": "trawl",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0043.2",
+        "kind": "item",
+        "id": "PA-0043",
+        "state": "discovered",
+        "lane": "normal",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z",
+        "found": {
+          "source": "sam-gov",
+          "title": "A made-up notice about a made-up tool",
+          "address": "https://example.org/made-up/notice-1/"
+        }
+      }
+    },
+    {
+      "as": "trawl",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0045.3",
+        "kind": "item",
+        "id": "PA-0045",
+        "state": "discovered",
+        "lane": "normal",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z",
+        "found": {
+          "source": "github-issues",
+          "title": "Use bold titles",
+          "address": "https://example.org/made-up/issue-1"
+        }
+      }
+    },
+    {
+      "note": "the sweep's find, with the result that came with it under the caller's name",
+      "as": "trawl",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0044.4",
+        "kind": "item",
+        "id": "PA-0044",
+        "state": "discovered",
+        "lane": "backfill",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z",
+        "found": {
+          "source": "web-sweep",
+          "title": "A made-up notice about a made-up tool",
+          "address": "https://example.org/made-up/swept-1"
+        },
+        "results": {
+          "trawl": {
+            "seen": "made-up page"
+          }
+        }
+      }
+    },
+    {
+      "as": "trawl",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 204
+    }
+  ]
+}

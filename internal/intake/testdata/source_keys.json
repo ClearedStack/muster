@@ -1,0 +1,41 @@
+{
+  "secret": "made-up-salt-secret-for-tests-only-0123456789abcdef",
+  "cases": [
+    {
+      "name": "an IPv4 address",
+      "day": "2026-01-05",
+      "source": "203.0.113.7",
+      "key": "6e66ec304dda9893cee0c7c01cffbf5e8aaf381e9b451aa06407d20c361c7ad9"
+    },
+    {
+      "name": "the same address the next day gives an unrelated key",
+      "day": "2026-01-06",
+      "source": "203.0.113.7",
+      "key": "e9619f937742f263f822ab30d359de8b18031cfdc957eb81c73351c70a762b04"
+    },
+    {
+      "name": "another address the same day",
+      "day": "2026-01-05",
+      "source": "198.51.100.20",
+      "key": "4dbf8d65e223bd2977b47a191f56ae885ded44c3f2b70e618800ed7c8412889b"
+    },
+    {
+      "name": "an IPv4 address written the IPv6 way is the same source",
+      "day": "2026-01-05",
+      "source": "::ffff:203.0.113.7",
+      "key": "6e66ec304dda9893cee0c7c01cffbf5e8aaf381e9b451aa06407d20c361c7ad9"
+    },
+    {
+      "name": "an IPv6 address",
+      "day": "2026-01-05",
+      "source": "2001:db8::7",
+      "key": "c0ea96f0bd4c3951776107efba150a57e0e5d022cd4949ff8439f1fbbdde8441"
+    },
+    {
+      "name": "the same IPv6 address written out in full is the same source",
+      "day": "2026-01-05",
+      "source": "2001:0db8:0000:0000:0000:0000:0000:0007",
+      "key": "c0ea96f0bd4c3951776107efba150a57e0e5d022cd4949ff8439f1fbbdde8441"
+    }
+  ]
+}

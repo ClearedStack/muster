@@ -1,0 +1,77 @@
+{
+  "about": "A live item with no check recorded, as in a seed, is due for one at once.",
+  "seed": {
+    "items": [
+      {
+        "id": "PA-0001",
+        "state": "live",
+        "lane": "normal"
+      }
+    ]
+  },
+  "steps": [
+    {
+      "as": "tidegauge",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0001.1",
+        "kind": "item",
+        "id": "PA-0001",
+        "state": "live",
+        "lane": "backfill",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z"
+      }
+    },
+    {
+      "as": "tidegauge",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0001.1",
+        "state": "live"
+      },
+      "status": 200,
+      "want": {
+        "id": "PA-0001",
+        "state": "live",
+        "next": "tidegauge"
+      }
+    },
+    {
+      "note": "then every seven days",
+      "as": "tidegauge",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 204
+    },
+    {
+      "wait": "168h",
+      "as": "tidegauge",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0001.2",
+        "kind": "item",
+        "id": "PA-0001",
+        "state": "live",
+        "lane": "backfill",
+        "attempt": 1,
+        "expires": "2026-01-12T09:01:00Z"
+      }
+    }
+  ]
+}

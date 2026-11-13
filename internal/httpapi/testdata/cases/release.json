@@ -1,0 +1,483 @@
+{
+  "about": "An item stopped by E_PARSE is leased to Countersign as a release step, for the owner to decide. Release puts it at the end of the urgent lane in the state it was held in, for the worker it was stopped at. Keep leaves it held.",
+  "seed": {
+    "items": [
+      {
+        "id": "PA-0001",
+        "state": "recorded",
+        "lane": "backfill",
+        "next": "sextant"
+      },
+      {
+        "id": "PA-0002",
+        "state": "recorded",
+        "lane": "normal",
+        "next": "sextant"
+      },
+      {
+        "id": "PA-0003",
+        "state": "recorded",
+        "lane": "normal",
+        "next": "sextant"
+      }
+    ]
+  },
+  "steps": [
+    {
+      "note": "nothing is held yet",
+      "as": "countersign",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 204
+    },
+    {
+      "note": "the normal items first",
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0002.1",
+        "kind": "item",
+        "id": "PA-0002",
+        "state": "recorded",
+        "lane": "normal",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z"
+      }
+    },
+    {
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0002.1",
+        "state": "observed",
+        "result": {
+          "job": "made-up job"
+        }
+      },
+      "status": 200,
+      "want": {
+        "id": "PA-0002",
+        "state": "observed",
+        "next": "assay"
+      }
+    },
+    {
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0003.2",
+        "kind": "item",
+        "id": "PA-0003",
+        "state": "recorded",
+        "lane": "normal",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z"
+      }
+    },
+    {
+      "note": "work on this one stops",
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/fail",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0003.2",
+        "code": "E_PARSE"
+      },
+      "status": 200,
+      "want": {
+        "id": "PA-0003",
+        "state": "recorded",
+        "held": true
+      }
+    },
+    {
+      "note": "then the backfill item",
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0001.3",
+        "kind": "item",
+        "id": "PA-0001",
+        "state": "recorded",
+        "lane": "backfill",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z"
+      }
+    },
+    {
+      "note": "and on this one",
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/fail",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0001.3",
+        "code": "E_PARSE"
+      },
+      "status": 200,
+      "want": {
+        "id": "PA-0001",
+        "state": "recorded",
+        "held": true
+      }
+    },
+    {
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 204
+    },
+    {
+      "note": "the first release step: the held state, and under results.held the worker and the code",
+      "as": "countersign",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "release:PA-0003.4",
+        "kind": "release",
+        "id": "PA-0003",
+        "state": "recorded",
+        "lane": "normal",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z",
+        "results": {
+          "held": {
+            "worker": "sextant",
+            "code": "E_PARSE"
+          }
+        }
+      }
+    },
+    {
+      "note": "a release step changes no state",
+      "as": "countersign",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "release:PA-0003.4",
+        "state": "observed",
+        "result": {
+          "decision": "release"
+        }
+      },
+      "status": 409,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "move_not_allowed",
+        "reason": "that move is not allowed"
+      }
+    },
+    {
+      "note": "it needs the owner's decision",
+      "as": "countersign",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "release:PA-0003.4",
+        "state": "recorded"
+      },
+      "status": 400,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "missing_field",
+        "reason": "a required field is missing"
+      }
+    },
+    {
+      "note": "one of the two decisions",
+      "as": "countersign",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "release:PA-0003.4",
+        "state": "recorded",
+        "result": {
+          "decision": "retry"
+        }
+      },
+      "status": 400,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "bad_field",
+        "reason": "a field does not have the form this call requires"
+      }
+    },
+    {
+      "note": "and nothing else",
+      "as": "countersign",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "release:PA-0003.4",
+        "state": "recorded",
+        "result": {
+          "decision": "release",
+          "lane": "normal"
+        }
+      },
+      "status": 400,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "bad_field",
+        "reason": "a field does not have the form this call requires"
+      }
+    },
+    {
+      "note": "it cannot be paused",
+      "as": "countersign",
+      "method": "POST",
+      "path": "/v1/needs_subtool",
+      "send": {
+        "contract": "v1",
+        "lease": "release:PA-0003.4"
+      },
+      "status": 409,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "move_not_allowed",
+        "reason": "that move is not allowed"
+      }
+    },
+    {
+      "note": "release: the item goes back to Sextant",
+      "as": "countersign",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "release:PA-0003.4",
+        "state": "recorded",
+        "result": {
+          "decision": "release"
+        }
+      },
+      "status": 200,
+      "want": {
+        "id": "PA-0003",
+        "state": "recorded",
+        "next": "sextant"
+      }
+    },
+    {
+      "note": "the same call again: the same answer",
+      "as": "countersign",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "release:PA-0003.4",
+        "state": "recorded",
+        "result": {
+          "decision": "release"
+        }
+      },
+      "status": 200,
+      "want": {
+        "id": "PA-0003",
+        "state": "recorded",
+        "next": "sextant"
+      }
+    },
+    {
+      "note": "the second release step",
+      "as": "countersign",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "release:PA-0001.5",
+        "kind": "release",
+        "id": "PA-0001",
+        "state": "recorded",
+        "lane": "normal",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z",
+        "results": {
+          "held": {
+            "worker": "sextant",
+            "code": "E_PARSE"
+          }
+        }
+      }
+    },
+    {
+      "note": "keep: the item stays held",
+      "as": "countersign",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "release:PA-0001.5",
+        "state": "recorded",
+        "result": {
+          "decision": "keep"
+        }
+      },
+      "status": 200,
+      "want": {
+        "id": "PA-0001",
+        "state": "recorded",
+        "held": true
+      }
+    },
+    {
+      "note": "nothing else to decide",
+      "as": "countersign",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 204
+    },
+    {
+      "note": "the released item: urgent now, still recorded, second attempt",
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0003.6",
+        "kind": "item",
+        "id": "PA-0003",
+        "state": "recorded",
+        "lane": "urgent",
+        "attempt": 2,
+        "expires": "2026-01-05T09:01:00Z"
+      }
+    },
+    {
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0003.6",
+        "state": "observed"
+      },
+      "status": 200,
+      "want": {
+        "id": "PA-0003",
+        "state": "observed",
+        "next": "assay"
+      }
+    },
+    {
+      "note": "the kept item is not offered",
+      "wait": "720h",
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 204
+    },
+    {
+      "note": "and no new release step appears for it",
+      "as": "countersign",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 204
+    },
+    {
+      "note": "Bellbuoy has an incident step for each of the two, whatever the owner decided",
+      "as": "bellbuoy",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "incident:PA-0003.7",
+        "kind": "incident",
+        "id": "PA-0003",
+        "state": "recorded",
+        "lane": "normal",
+        "attempt": 1,
+        "expires": "2026-02-04T09:01:00Z",
+        "incident": {
+          "id": "PA-0003",
+          "worker": "sextant",
+          "code": "E_PARSE",
+          "state": "recorded"
+        }
+      }
+    },
+    {
+      "as": "bellbuoy",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "incident:PA-0001.8",
+        "kind": "incident",
+        "id": "PA-0001",
+        "state": "recorded",
+        "lane": "normal",
+        "attempt": 1,
+        "expires": "2026-02-04T09:01:00Z",
+        "incident": {
+          "id": "PA-0001",
+          "worker": "sextant",
+          "code": "E_PARSE",
+          "state": "recorded"
+        }
+      }
+    },
+    {
+      "as": "bellbuoy",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 204
+    }
+  ]
+}
