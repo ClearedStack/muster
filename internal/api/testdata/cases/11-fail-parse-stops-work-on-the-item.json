@@ -1,0 +1,26 @@
+{
+  "rule": "Fail with E_PARSE keeps the item's state, records the failure and stops work on the item: it is not handed out again.",
+  "lease_seconds": 60,
+  "items": [
+    {"id":"PA-0001","state":"observed","lane":"urgent"},
+    {"id":"PA-0002","state":"observed","lane":"normal"}
+  ],
+  "steps": [
+    {"path":"/v1/lease","body":{"worker":"assay","state":"observed"},"status":200,"response":{"item":"PA-0001","state":"observed","lane":"urgent","lease_id":"L-00000001","expires_at":"2026-01-01T00:01:00Z"}},
+    {"path":"/v1/fail","body":{"worker":"assay","item":"PA-0001","lease_id":"L-00000001","code":"E_PARSE"},"status":200,"response":{"item":"PA-0001","state":"observed","queue":"stopped"}},
+    {"path":"/v1/lease","body":{"worker":"assay","state":"observed"},"status":200,"response":{"item":"PA-0002","state":"observed","lane":"normal","lease_id":"L-00000002","expires_at":"2026-01-01T00:01:00Z"}},
+    {"path":"/v1/lease","body":{"worker":"assay","state":"observed"},"status":204},
+    {"after_seconds":3600,"path":"/v1/lease","body":{"worker":"assay","state":"observed"},"status":200,"response":{"item":"PA-0002","state":"observed","lane":"normal","lease_id":"L-00000003","expires_at":"2026-01-01T01:01:00Z"}}
+  ],
+  "ledger": [
+    {"seq":1,"at":"2026-01-01T00:00:00Z","item":"PA-0001","call":"lease","worker":"assay","lease_id":"L-00000001","from":"observed","to":"observed"},
+    {"seq":2,"at":"2026-01-01T00:00:00Z","item":"PA-0001","call":"fail","worker":"assay","lease_id":"L-00000001","from":"observed","to":"observed","code":"E_PARSE"},
+    {"seq":3,"at":"2026-01-01T00:00:00Z","item":"PA-0002","call":"lease","worker":"assay","lease_id":"L-00000002","from":"observed","to":"observed"},
+    {"seq":4,"at":"2026-01-01T01:00:00Z","item":"PA-0002","call":"expire","worker":"assay","lease_id":"L-00000002","from":"observed","to":"observed"},
+    {"seq":5,"at":"2026-01-01T01:00:00Z","item":"PA-0002","call":"lease","worker":"assay","lease_id":"L-00000003","from":"observed","to":"observed"}
+  ],
+  "items_after": [
+    {"id":"PA-0001","state":"observed","lane":"urgent","queue":"stopped"},
+    {"id":"PA-0002","state":"observed","lane":"normal","queue":"leased","lease_id":"L-00000003","lease_worker":"assay","lease_until":"2026-01-01T01:01:00Z"}
+  ]
+}

@@ -1,0 +1,46 @@
+{
+  "rule": "A request that is broken, incomplete, carries a field the call does not take, names an unknown worker or state, or asks for items in a state that is not handed out, is refused with E_PARSE and changes nothing.",
+  "lease_seconds": 60,
+  "items": [
+    {"id":"PA-0001","state":"recorded","lane":"normal"}
+  ],
+  "steps": [
+    {"path":"/v1/lease","raw":"{\"worker\":\"sextant\",\"state\":","status":400,"response":{"error":{"code":"E_PARSE","message":"The request is not valid JSON with the expected fields."}}},
+    {"path":"/v1/lease","raw":"","status":400,"response":{"error":{"code":"E_PARSE","message":"The request is not valid JSON with the expected fields."}}},
+    {"path":"/v1/lease","raw":"{\"worker\":\"sextant\",\"state\":\"recorded\"} {\"again\":true}","status":400,"response":{"error":{"code":"E_PARSE","message":"The request has something after the JSON object."}}},
+    {"path":"/v1/lease","raw":"[\"sextant\",\"recorded\"]","status":400,"response":{"error":{"code":"E_PARSE","message":"The request is not valid JSON with the expected fields."}}},
+    {"path":"/v1/lease","body":{"worker":"sextant","state":"recorded","priority":"urgent"},"status":400,"response":{"error":{"code":"E_PARSE","message":"The request is not valid JSON with the expected fields."}}},
+    {"path":"/v1/lease","body":{"worker":"sextant"},"status":400,"response":{"error":{"code":"E_PARSE","message":"The request lacks a field this call needs."}}},
+    {"path":"/v1/lease","body":{"state":"recorded"},"status":400,"response":{"error":{"code":"E_PARSE","message":"The worker is not one of the ten in the registry."}}},
+    {"path":"/v1/lease","body":{"worker":"harbourmaster","state":"recorded"},"status":400,"response":{"error":{"code":"E_PARSE","message":"The worker is not one of the ten in the registry."}}},
+    {"path":"/v1/lease","body":{"worker":"Sextant","state":"recorded"},"status":400,"response":{"error":{"code":"E_PARSE","message":"The worker is not one of the ten in the registry."}}},
+    {"path":"/v1/lease","body":{"worker":"sextant","state":"finished"},"status":400,"response":{"error":{"code":"E_PARSE","message":"The state is not one of the fourteen."}}},
+    {"path":"/v1/lease","body":{"worker":"sextant","state":"needs_subtool"},"status":400,"response":{"error":{"code":"E_PARSE","message":"Items in that state are not handed out."}}},
+    {"path":"/v1/lease","body":{"worker":"sextant","state":"rejected"},"status":400,"response":{"error":{"code":"E_PARSE","message":"Items in that state are not handed out."}}},
+    {"path":"/v1/lease","body":{"worker":"sextant","state":"retired"},"status":400,"response":{"error":{"code":"E_PARSE","message":"Items in that state are not handed out."}}},
+    {"path":"/v1/lease","body":{"worker":"sextant","state":"recorded","item":"PA-0001"},"status":400,"response":{"error":{"code":"E_PARSE","message":"The request has a field this call does not take."}}},
+    {"method":"GET","path":"/v1/lease","body":{"worker":"sextant","state":"recorded"},"status":405,"response":{"error":{"code":"E_PARSE","message":"This call accepts POST only."}}},
+    {"path":"/v1/release","body":{"worker":"sextant","item":"PA-0001"},"status":404,"response":{"error":{"code":"E_PARSE","message":"There is no such call."}}},
+    {"method":"GET","path":"/","status":404,"response":{"error":{"code":"E_PARSE","message":"There is no such call."}}},
+    {"path":"/v1/heartbeat","body":{"worker":"sextant","item":"PA-0001"},"status":400,"response":{"error":{"code":"E_PARSE","message":"The request lacks a field this call needs."}}},
+    {"path":"/v1/heartbeat","body":{"worker":"sextant","item":"PA-0001","lease_id":""},"status":400,"response":{"error":{"code":"E_PARSE","message":"The lease identifier is empty."}}},
+    {"path":"/v1/heartbeat","body":{"worker":"sextant","item":"PA-1","lease_id":"L-00000001"},"status":400,"response":{"error":{"code":"E_PARSE","message":"The item identifier is not of the form PA-0001."}}},
+    {"path":"/v1/heartbeat","body":{"worker":"sextant","item":"../PA-0001","lease_id":"L-00000001"},"status":400,"response":{"error":{"code":"E_PARSE","message":"The item identifier is not of the form PA-0001."}}},
+    {"path":"/v1/heartbeat","body":{"worker":"sextant","item":"PA-0001","lease_id":"L-00000001","to":"observed"},"status":400,"response":{"error":{"code":"E_PARSE","message":"The request has a field this call does not take."}}},
+    {"path":"/v1/complete","body":{"worker":"sextant","item":"PA-0001","lease_id":"L-00000001"},"status":400,"response":{"error":{"code":"E_PARSE","message":"The request lacks a field this call needs."}}},
+    {"path":"/v1/complete","body":{"worker":"sextant","item":"PA-0001","lease_id":"L-00000001","to":"finished"},"status":400,"response":{"error":{"code":"E_PARSE","message":"The state is not one of the fourteen."}}},
+    {"path":"/v1/complete","body":{"worker":"sextant","item":"PA-0001","lease_id":"L-00000001","to":"observed","result":["a list"]},"status":400,"response":{"error":{"code":"E_PARSE","message":"The result is not a JSON object."}}},
+    {"path":"/v1/complete","body":{"worker":"sextant","item":"PA-0001","lease_id":"L-00000001","to":"observed","result":null},"status":400,"response":{"error":{"code":"E_PARSE","message":"The result is not a JSON object."}}},
+    {"path":"/v1/complete","body":{"worker":"sextant","item":"PA-0001","lease_id":"L-00000001","to":"observed","code":"E_PARSE"},"status":400,"response":{"error":{"code":"E_PARSE","message":"The request has a field this call does not take."}}},
+    {"path":"/v1/fail","body":{"worker":"sextant","item":"PA-0001","lease_id":"L-00000001"},"status":400,"response":{"error":{"code":"E_PARSE","message":"The request lacks a field this call needs."}}},
+    {"path":"/v1/fail","body":{"worker":"sextant","item":"PA-0001","lease_id":"L-00000001","code":"E_OTHER"},"status":400,"response":{"error":{"code":"E_PARSE","message":"The code is not one of the three public error codes."}}},
+    {"path":"/v1/fail","body":{"worker":"sextant","item":"PA-0001","lease_id":"L-00000001","code":"E_NEEDS_SUBTOOL"},"status":400,"response":{"error":{"code":"E_PARSE","message":"E_NEEDS_SUBTOOL is reported with the needs_subtool call."}}},
+    {"path":"/v1/fail","body":{"worker":"sextant","item":"PA-0001","lease_id":"L-00000001","code":"E_PARSE","to":"rejected"},"status":400,"response":{"error":{"code":"E_PARSE","message":"The request has a field this call does not take."}}},
+    {"path":"/v1/needs_subtool","body":{"worker":"sextant","item":"PA-0001"},"status":400,"response":{"error":{"code":"E_PARSE","message":"The request lacks a field this call needs."}}},
+    {"path":"/v1/needs_subtool","body":{"worker":"sextant","item":"PA-0001","lease_id":"L-00000001","code":"E_NEEDS_SUBTOOL"},"status":400,"response":{"error":{"code":"E_PARSE","message":"The request has a field this call does not take."}}}
+  ],
+  "ledger": [],
+  "items_after": [
+    {"id":"PA-0001","state":"recorded","lane":"normal","queue":"waiting"}
+  ]
+}

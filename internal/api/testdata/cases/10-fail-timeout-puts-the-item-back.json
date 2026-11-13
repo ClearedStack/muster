@@ -1,0 +1,26 @@
+{
+  "rule": "Fail with E_TIMEOUT keeps the item's state and puts it back in the queue in its old place, to be tried again under a new lease.",
+  "lease_seconds": 60,
+  "items": [
+    {"id":"PA-0001","state":"observed","lane":"normal"},
+    {"id":"PA-0002","state":"observed","lane":"normal"}
+  ],
+  "steps": [
+    {"path":"/v1/lease","body":{"worker":"assay","state":"observed"},"status":200,"response":{"item":"PA-0001","state":"observed","lane":"normal","lease_id":"L-00000001","expires_at":"2026-01-01T00:01:00Z"}},
+    {"path":"/v1/fail","body":{"worker":"assay","item":"PA-0001","lease_id":"L-00000001","code":"E_TIMEOUT"},"status":200,"response":{"item":"PA-0001","state":"observed","queue":"waiting"}},
+    {"path":"/v1/lease","body":{"worker":"assay","state":"observed"},"status":200,"response":{"item":"PA-0001","state":"observed","lane":"normal","lease_id":"L-00000002","expires_at":"2026-01-01T00:01:00Z"}},
+    {"path":"/v1/lease","body":{"worker":"assay","state":"observed"},"status":200,"response":{"item":"PA-0002","state":"observed","lane":"normal","lease_id":"L-00000003","expires_at":"2026-01-01T00:01:00Z"}},
+    {"path":"/v1/complete","body":{"worker":"assay","item":"PA-0001","lease_id":"L-00000002","to":"scored","result":{"score":64}},"status":200,"response":{"item":"PA-0001","state":"scored","queue":"waiting"}}
+  ],
+  "ledger": [
+    {"seq":1,"at":"2026-01-01T00:00:00Z","item":"PA-0001","call":"lease","worker":"assay","lease_id":"L-00000001","from":"observed","to":"observed"},
+    {"seq":2,"at":"2026-01-01T00:00:00Z","item":"PA-0001","call":"fail","worker":"assay","lease_id":"L-00000001","from":"observed","to":"observed","code":"E_TIMEOUT"},
+    {"seq":3,"at":"2026-01-01T00:00:00Z","item":"PA-0001","call":"lease","worker":"assay","lease_id":"L-00000002","from":"observed","to":"observed"},
+    {"seq":4,"at":"2026-01-01T00:00:00Z","item":"PA-0002","call":"lease","worker":"assay","lease_id":"L-00000003","from":"observed","to":"observed"},
+    {"seq":5,"at":"2026-01-01T00:00:00Z","item":"PA-0001","call":"complete","worker":"assay","lease_id":"L-00000002","from":"observed","to":"scored","result":{"score":64}}
+  ],
+  "items_after": [
+    {"id":"PA-0001","state":"scored","lane":"normal","queue":"waiting"},
+    {"id":"PA-0002","state":"observed","lane":"normal","queue":"leased","lease_id":"L-00000003","lease_worker":"assay","lease_until":"2026-01-01T00:01:00Z"}
+  ]
+}

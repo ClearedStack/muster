@@ -1,0 +1,28 @@
+{
+  "rule": "Lease hands out only items waiting in the state the worker names.",
+  "lease_seconds": 60,
+  "items": [
+    {"id":"PA-0001","state":"discovered","lane":"urgent"},
+    {"id":"PA-0002","state":"observed","lane":"normal"},
+    {"id":"PA-0003","state":"recorded","lane":"backfill"},
+    {"id":"PA-0004","state":"rejected","lane":"urgent"}
+  ],
+  "steps": [
+    {"path":"/v1/lease","body":{"worker":"sextant","state":"recorded"},"status":200,"response":{"item":"PA-0003","state":"recorded","lane":"backfill","lease_id":"L-00000001","expires_at":"2026-01-01T00:01:00Z"}},
+    {"path":"/v1/lease","body":{"worker":"sextant","state":"recorded"},"status":204},
+    {"path":"/v1/lease","body":{"worker":"assay","state":"observed"},"status":200,"response":{"item":"PA-0002","state":"observed","lane":"normal","lease_id":"L-00000002","expires_at":"2026-01-01T00:01:00Z"}},
+    {"path":"/v1/lease","body":{"worker":"trawl","state":"discovered"},"status":200,"response":{"item":"PA-0001","state":"discovered","lane":"urgent","lease_id":"L-00000003","expires_at":"2026-01-01T00:01:00Z"}},
+    {"path":"/v1/lease","body":{"worker":"countersign","state":"scored"},"status":204}
+  ],
+  "ledger": [
+    {"seq":1,"at":"2026-01-01T00:00:00Z","item":"PA-0003","call":"lease","worker":"sextant","lease_id":"L-00000001","from":"recorded","to":"recorded"},
+    {"seq":2,"at":"2026-01-01T00:00:00Z","item":"PA-0002","call":"lease","worker":"assay","lease_id":"L-00000002","from":"observed","to":"observed"},
+    {"seq":3,"at":"2026-01-01T00:00:00Z","item":"PA-0001","call":"lease","worker":"trawl","lease_id":"L-00000003","from":"discovered","to":"discovered"}
+  ],
+  "items_after": [
+    {"id":"PA-0001","state":"discovered","lane":"urgent","queue":"leased","lease_id":"L-00000003","lease_worker":"trawl","lease_until":"2026-01-01T00:01:00Z"},
+    {"id":"PA-0002","state":"observed","lane":"normal","queue":"leased","lease_id":"L-00000002","lease_worker":"assay","lease_until":"2026-01-01T00:01:00Z"},
+    {"id":"PA-0003","state":"recorded","lane":"backfill","queue":"leased","lease_id":"L-00000001","lease_worker":"sextant","lease_until":"2026-01-01T00:01:00Z"},
+    {"id":"PA-0004","state":"rejected","lane":"urgent","queue":"idle"}
+  ]
+}

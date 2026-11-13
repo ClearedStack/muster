@@ -1,0 +1,39 @@
+{
+  "rule": "needs_subtool moves the item to needs_subtool from recorded, observed or approved, remembers the state it was paused in and the worker that paused it, and takes it out of the queue. Everything else in the queue carries on.",
+  "lease_seconds": 60,
+  "items": [
+    {"id":"PA-0001","state":"recorded","lane":"normal"},
+    {"id":"PA-0002","state":"observed","lane":"normal"},
+    {"id":"PA-0003","state":"approved","lane":"normal"},
+    {"id":"PA-0004","state":"recorded","lane":"normal"}
+  ],
+  "steps": [
+    {"path":"/v1/lease","body":{"worker":"sextant","state":"recorded"},"status":200,"response":{"item":"PA-0001","state":"recorded","lane":"normal","lease_id":"L-00000001","expires_at":"2026-01-01T00:01:00Z"}},
+    {"path":"/v1/needs_subtool","body":{"worker":"sextant","item":"PA-0001","lease_id":"L-00000001"},"status":200,"response":{"item":"PA-0001","state":"needs_subtool","queue":"idle"}},
+    {"path":"/v1/lease","body":{"worker":"assay","state":"observed"},"status":200,"response":{"item":"PA-0002","state":"observed","lane":"normal","lease_id":"L-00000002","expires_at":"2026-01-01T00:01:00Z"}},
+    {"path":"/v1/needs_subtool","body":{"worker":"assay","item":"PA-0002","lease_id":"L-00000002"},"status":200,"response":{"item":"PA-0002","state":"needs_subtool","queue":"idle"}},
+    {"path":"/v1/lease","body":{"worker":"waybill","state":"approved"},"status":200,"response":{"item":"PA-0003","state":"approved","lane":"normal","lease_id":"L-00000003","expires_at":"2026-01-01T00:01:00Z"}},
+    {"path":"/v1/needs_subtool","body":{"worker":"waybill","item":"PA-0003","lease_id":"L-00000003"},"status":200,"response":{"item":"PA-0003","state":"needs_subtool","queue":"idle"}},
+    {"path":"/v1/lease","body":{"worker":"sextant","state":"recorded"},"status":200,"response":{"item":"PA-0004","state":"recorded","lane":"normal","lease_id":"L-00000004","expires_at":"2026-01-01T00:01:00Z"}},
+    {"after_seconds":3600,"path":"/v1/lease","body":{"worker":"sextant","state":"recorded"},"status":200,"response":{"item":"PA-0004","state":"recorded","lane":"normal","lease_id":"L-00000005","expires_at":"2026-01-01T01:01:00Z"}},
+    {"path":"/v1/lease","body":{"worker":"assay","state":"observed"},"status":204},
+    {"path":"/v1/lease","body":{"worker":"waybill","state":"approved"},"status":204}
+  ],
+  "ledger": [
+    {"seq":1,"at":"2026-01-01T00:00:00Z","item":"PA-0001","call":"lease","worker":"sextant","lease_id":"L-00000001","from":"recorded","to":"recorded"},
+    {"seq":2,"at":"2026-01-01T00:00:00Z","item":"PA-0001","call":"needs_subtool","worker":"sextant","lease_id":"L-00000001","from":"recorded","to":"needs_subtool","code":"E_NEEDS_SUBTOOL"},
+    {"seq":3,"at":"2026-01-01T00:00:00Z","item":"PA-0002","call":"lease","worker":"assay","lease_id":"L-00000002","from":"observed","to":"observed"},
+    {"seq":4,"at":"2026-01-01T00:00:00Z","item":"PA-0002","call":"needs_subtool","worker":"assay","lease_id":"L-00000002","from":"observed","to":"needs_subtool","code":"E_NEEDS_SUBTOOL"},
+    {"seq":5,"at":"2026-01-01T00:00:00Z","item":"PA-0003","call":"lease","worker":"waybill","lease_id":"L-00000003","from":"approved","to":"approved"},
+    {"seq":6,"at":"2026-01-01T00:00:00Z","item":"PA-0003","call":"needs_subtool","worker":"waybill","lease_id":"L-00000003","from":"approved","to":"needs_subtool","code":"E_NEEDS_SUBTOOL"},
+    {"seq":7,"at":"2026-01-01T00:00:00Z","item":"PA-0004","call":"lease","worker":"sextant","lease_id":"L-00000004","from":"recorded","to":"recorded"},
+    {"seq":8,"at":"2026-01-01T01:00:00Z","item":"PA-0004","call":"expire","worker":"sextant","lease_id":"L-00000004","from":"recorded","to":"recorded"},
+    {"seq":9,"at":"2026-01-01T01:00:00Z","item":"PA-0004","call":"lease","worker":"sextant","lease_id":"L-00000005","from":"recorded","to":"recorded"}
+  ],
+  "items_after": [
+    {"id":"PA-0001","state":"needs_subtool","lane":"normal","queue":"idle","paused_from":"recorded","paused_by":"sextant"},
+    {"id":"PA-0002","state":"needs_subtool","lane":"normal","queue":"idle","paused_from":"observed","paused_by":"assay"},
+    {"id":"PA-0003","state":"needs_subtool","lane":"normal","queue":"idle","paused_from":"approved","paused_by":"waybill"},
+    {"id":"PA-0004","state":"recorded","lane":"normal","queue":"leased","lease_id":"L-00000005","lease_worker":"sextant","lease_until":"2026-01-01T01:01:00Z"}
+  ]
+}

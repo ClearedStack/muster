@@ -1,0 +1,43 @@
+{
+  "rule": "Complete records the result, moves the item to the state named and puts it back in the queue for that state in the same step. An item that reaches an end state leaves the queue.",
+  "lease_seconds": 60,
+  "items": [
+    {"id":"PA-0001","state":"discovered","lane":"urgent"}
+  ],
+  "steps": [
+    {"path":"/v1/lease","body":{"worker":"trawl","state":"discovered"},"status":200,"response":{"item":"PA-0001","state":"discovered","lane":"urgent","lease_id":"L-00000001","expires_at":"2026-01-01T00:01:00Z"}},
+    {"path":"/v1/complete","body":{"worker":"trawl","item":"PA-0001","lease_id":"L-00000001","to":"recorded","result":{"source":"made-up form entry"}},"status":200,"response":{"item":"PA-0001","state":"recorded","queue":"waiting"}},
+    {"path":"/v1/lease","body":{"worker":"sextant","state":"recorded"},"status":200,"response":{"item":"PA-0001","state":"recorded","lane":"urgent","lease_id":"L-00000002","expires_at":"2026-01-01T00:01:00Z"}},
+    {"path":"/v1/complete","body":{"worker":"sextant","item":"PA-0001","lease_id":"L-00000002","to":"observed","result":{"job":"adds two made-up numbers","login":false}},"status":200,"response":{"item":"PA-0001","state":"observed","queue":"waiting"}},
+    {"path":"/v1/lease","body":{"worker":"assay","state":"observed"},"status":200,"response":{"item":"PA-0001","state":"observed","lane":"urgent","lease_id":"L-00000003","expires_at":"2026-01-01T00:01:00Z"}},
+    {"path":"/v1/complete","body":{"worker":"assay","item":"PA-0001","lease_id":"L-00000003","to":"scored","result":{"gates":[true,true,true,true,true],"score":71}},"status":200,"response":{"item":"PA-0001","state":"scored","queue":"waiting"}},
+    {"path":"/v1/lease","body":{"worker":"countersign","state":"scored"},"status":200,"response":{"item":"PA-0001","state":"scored","lane":"urgent","lease_id":"L-00000004","expires_at":"2026-01-01T00:01:00Z"}},
+    {"path":"/v1/complete","body":{"worker":"countersign","item":"PA-0001","lease_id":"L-00000004","to":"approved"},"status":200,"response":{"item":"PA-0001","state":"approved","queue":"waiting"}},
+    {"path":"/v1/lease","body":{"worker":"moldloft","state":"approved"},"status":200,"response":{"item":"PA-0001","state":"approved","lane":"urgent","lease_id":"L-00000005","expires_at":"2026-01-01T00:01:00Z"}},
+    {"path":"/v1/complete","body":{"worker":"moldloft","item":"PA-0001","lease_id":"L-00000005","to":"building","result":{"template":"calculator"}},"status":200,"response":{"item":"PA-0001","state":"building","queue":"waiting"}},
+    {"path":"/v1/lease","body":{"worker":"chartroom","state":"building"},"status":200,"response":{"item":"PA-0001","state":"building","lane":"urgent","lease_id":"L-00000006","expires_at":"2026-01-01T00:01:00Z"}},
+    {"path":"/v1/complete","body":{"worker":"chartroom","item":"PA-0001","lease_id":"L-00000006","to":"live"},"status":200,"response":{"item":"PA-0001","state":"live","queue":"waiting"}},
+    {"path":"/v1/lease","body":{"worker":"tidegauge","state":"live"},"status":200,"response":{"item":"PA-0001","state":"live","lane":"urgent","lease_id":"L-00000007","expires_at":"2026-01-01T00:01:00Z"}},
+    {"path":"/v1/complete","body":{"worker":"tidegauge","item":"PA-0001","lease_id":"L-00000007","to":"retired","result":{"note":"made-up rule withdrawn"}},"status":200,"response":{"item":"PA-0001","state":"retired","queue":"idle"}},
+    {"path":"/v1/lease","body":{"worker":"tidegauge","state":"live"},"status":204}
+  ],
+  "ledger": [
+    {"seq":1,"at":"2026-01-01T00:00:00Z","item":"PA-0001","call":"lease","worker":"trawl","lease_id":"L-00000001","from":"discovered","to":"discovered"},
+    {"seq":2,"at":"2026-01-01T00:00:00Z","item":"PA-0001","call":"complete","worker":"trawl","lease_id":"L-00000001","from":"discovered","to":"recorded","result":{"source":"made-up form entry"}},
+    {"seq":3,"at":"2026-01-01T00:00:00Z","item":"PA-0001","call":"lease","worker":"sextant","lease_id":"L-00000002","from":"recorded","to":"recorded"},
+    {"seq":4,"at":"2026-01-01T00:00:00Z","item":"PA-0001","call":"complete","worker":"sextant","lease_id":"L-00000002","from":"recorded","to":"observed","result":{"job":"adds two made-up numbers","login":false}},
+    {"seq":5,"at":"2026-01-01T00:00:00Z","item":"PA-0001","call":"lease","worker":"assay","lease_id":"L-00000003","from":"observed","to":"observed"},
+    {"seq":6,"at":"2026-01-01T00:00:00Z","item":"PA-0001","call":"complete","worker":"assay","lease_id":"L-00000003","from":"observed","to":"scored","result":{"gates":[true,true,true,true,true],"score":71}},
+    {"seq":7,"at":"2026-01-01T00:00:00Z","item":"PA-0001","call":"lease","worker":"countersign","lease_id":"L-00000004","from":"scored","to":"scored"},
+    {"seq":8,"at":"2026-01-01T00:00:00Z","item":"PA-0001","call":"complete","worker":"countersign","lease_id":"L-00000004","from":"scored","to":"approved"},
+    {"seq":9,"at":"2026-01-01T00:00:00Z","item":"PA-0001","call":"lease","worker":"moldloft","lease_id":"L-00000005","from":"approved","to":"approved"},
+    {"seq":10,"at":"2026-01-01T00:00:00Z","item":"PA-0001","call":"complete","worker":"moldloft","lease_id":"L-00000005","from":"approved","to":"building","result":{"template":"calculator"}},
+    {"seq":11,"at":"2026-01-01T00:00:00Z","item":"PA-0001","call":"lease","worker":"chartroom","lease_id":"L-00000006","from":"building","to":"building"},
+    {"seq":12,"at":"2026-01-01T00:00:00Z","item":"PA-0001","call":"complete","worker":"chartroom","lease_id":"L-00000006","from":"building","to":"live"},
+    {"seq":13,"at":"2026-01-01T00:00:00Z","item":"PA-0001","call":"lease","worker":"tidegauge","lease_id":"L-00000007","from":"live","to":"live"},
+    {"seq":14,"at":"2026-01-01T00:00:00Z","item":"PA-0001","call":"complete","worker":"tidegauge","lease_id":"L-00000007","from":"live","to":"retired","result":{"note":"made-up rule withdrawn"}}
+  ],
+  "items_after": [
+    {"id":"PA-0001","state":"retired","lane":"urgent","queue":"idle"}
+  ]
+}

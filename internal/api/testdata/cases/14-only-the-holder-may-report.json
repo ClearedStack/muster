@@ -1,0 +1,33 @@
+{
+  "rule": "Heartbeat, complete, fail and needs_subtool are accepted only from the worker that holds the lease, quoting that lease. Another worker, another lease identifier, an item that is not leased and an item that does not exist are all refused.",
+  "lease_seconds": 60,
+  "items": [
+    {"id":"PA-0001","state":"recorded","lane":"normal"},
+    {"id":"PA-0002","state":"recorded","lane":"normal"}
+  ],
+  "steps": [
+    {"path":"/v1/lease","body":{"worker":"sextant","state":"recorded"},"status":200,"response":{"item":"PA-0001","state":"recorded","lane":"normal","lease_id":"L-00000001","expires_at":"2026-01-01T00:01:00Z"}},
+    {"path":"/v1/heartbeat","body":{"worker":"assay","item":"PA-0001","lease_id":"L-00000001"},"status":409,"response":{"error":{"code":"E_PARSE","message":"This worker does not hold that lease on the item."}}},
+    {"path":"/v1/complete","body":{"worker":"assay","item":"PA-0001","lease_id":"L-00000001","to":"observed"},"status":409,"response":{"error":{"code":"E_PARSE","message":"This worker does not hold that lease on the item."}}},
+    {"path":"/v1/fail","body":{"worker":"assay","item":"PA-0001","lease_id":"L-00000001","code":"E_PARSE"},"status":409,"response":{"error":{"code":"E_PARSE","message":"This worker does not hold that lease on the item."}}},
+    {"path":"/v1/needs_subtool","body":{"worker":"assay","item":"PA-0001","lease_id":"L-00000001"},"status":409,"response":{"error":{"code":"E_PARSE","message":"This worker does not hold that lease on the item."}}},
+    {"path":"/v1/heartbeat","body":{"worker":"sextant","item":"PA-0001","lease_id":"L-00000002"},"status":409,"response":{"error":{"code":"E_PARSE","message":"This worker does not hold that lease on the item."}}},
+    {"path":"/v1/complete","body":{"worker":"sextant","item":"PA-0001","lease_id":"L-00000009","to":"observed"},"status":409,"response":{"error":{"code":"E_PARSE","message":"This worker does not hold that lease on the item."}}},
+    {"path":"/v1/complete","body":{"worker":"sextant","item":"PA-0001","lease_id":"l-00000001","to":"observed"},"status":409,"response":{"error":{"code":"E_PARSE","message":"This worker does not hold that lease on the item."}}},
+    {"path":"/v1/heartbeat","body":{"worker":"sextant","item":"PA-0002","lease_id":"L-00000001"},"status":409,"response":{"error":{"code":"E_PARSE","message":"This worker does not hold that lease on the item."}}},
+    {"path":"/v1/complete","body":{"worker":"sextant","item":"PA-0002","lease_id":"L-00000001","to":"observed"},"status":409,"response":{"error":{"code":"E_PARSE","message":"This worker does not hold that lease on the item."}}},
+    {"path":"/v1/heartbeat","body":{"worker":"sextant","item":"PA-0003","lease_id":"L-00000001"},"status":404,"response":{"error":{"code":"E_PARSE","message":"There is no item with that identifier."}}},
+    {"path":"/v1/complete","body":{"worker":"sextant","item":"PA-0003","lease_id":"L-00000001","to":"observed"},"status":404,"response":{"error":{"code":"E_PARSE","message":"There is no item with that identifier."}}},
+    {"path":"/v1/fail","body":{"worker":"sextant","item":"PA-0003","lease_id":"L-00000001","code":"E_PARSE"},"status":404,"response":{"error":{"code":"E_PARSE","message":"There is no item with that identifier."}}},
+    {"path":"/v1/needs_subtool","body":{"worker":"sextant","item":"PA-0003","lease_id":"L-00000001"},"status":404,"response":{"error":{"code":"E_PARSE","message":"There is no item with that identifier."}}},
+    {"path":"/v1/complete","body":{"worker":"sextant","item":"PA-0001","lease_id":"L-00000001","to":"observed"},"status":200,"response":{"item":"PA-0001","state":"observed","queue":"waiting"}}
+  ],
+  "ledger": [
+    {"seq":1,"at":"2026-01-01T00:00:00Z","item":"PA-0001","call":"lease","worker":"sextant","lease_id":"L-00000001","from":"recorded","to":"recorded"},
+    {"seq":2,"at":"2026-01-01T00:00:00Z","item":"PA-0001","call":"complete","worker":"sextant","lease_id":"L-00000001","from":"recorded","to":"observed"}
+  ],
+  "items_after": [
+    {"id":"PA-0001","state":"observed","lane":"normal","queue":"waiting"},
+    {"id":"PA-0002","state":"recorded","lane":"normal","queue":"waiting"}
+  ]
+}

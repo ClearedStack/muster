@@ -1,0 +1,33 @@
+{
+  "rule": "needs_subtool is refused from a state the table gives no pause for. The item and its lease are left as they were.",
+  "lease_seconds": 60,
+  "items": [
+    {"id":"PA-0001","state":"discovered","lane":"normal"},
+    {"id":"PA-0002","state":"scored","lane":"normal"},
+    {"id":"PA-0003","state":"building","lane":"normal"},
+    {"id":"PA-0004","state":"live","lane":"normal"}
+  ],
+  "steps": [
+    {"path":"/v1/lease","body":{"worker":"trawl","state":"discovered"},"status":200,"response":{"item":"PA-0001","state":"discovered","lane":"normal","lease_id":"L-00000001","expires_at":"2026-01-01T00:01:00Z"}},
+    {"path":"/v1/needs_subtool","body":{"worker":"trawl","item":"PA-0001","lease_id":"L-00000001"},"status":409,"response":{"error":{"code":"E_PARSE","message":"The item may not make that move from its present state."}}},
+    {"path":"/v1/lease","body":{"worker":"countersign","state":"scored"},"status":200,"response":{"item":"PA-0002","state":"scored","lane":"normal","lease_id":"L-00000002","expires_at":"2026-01-01T00:01:00Z"}},
+    {"path":"/v1/needs_subtool","body":{"worker":"countersign","item":"PA-0002","lease_id":"L-00000002"},"status":409,"response":{"error":{"code":"E_PARSE","message":"The item may not make that move from its present state."}}},
+    {"path":"/v1/lease","body":{"worker":"shakedown","state":"building"},"status":200,"response":{"item":"PA-0003","state":"building","lane":"normal","lease_id":"L-00000003","expires_at":"2026-01-01T00:01:00Z"}},
+    {"path":"/v1/needs_subtool","body":{"worker":"shakedown","item":"PA-0003","lease_id":"L-00000003"},"status":409,"response":{"error":{"code":"E_PARSE","message":"The item may not make that move from its present state."}}},
+    {"path":"/v1/lease","body":{"worker":"tidegauge","state":"live"},"status":200,"response":{"item":"PA-0004","state":"live","lane":"normal","lease_id":"L-00000004","expires_at":"2026-01-01T00:01:00Z"}},
+    {"path":"/v1/needs_subtool","body":{"worker":"tidegauge","item":"PA-0004","lease_id":"L-00000004"},"status":409,"response":{"error":{"code":"E_PARSE","message":"The item may not make that move from its present state."}}},
+    {"after_seconds":5,"path":"/v1/heartbeat","body":{"worker":"trawl","item":"PA-0001","lease_id":"L-00000001"},"status":200,"response":{"item":"PA-0001","state":"discovered","lane":"normal","lease_id":"L-00000001","expires_at":"2026-01-01T00:01:05Z"}}
+  ],
+  "ledger": [
+    {"seq":1,"at":"2026-01-01T00:00:00Z","item":"PA-0001","call":"lease","worker":"trawl","lease_id":"L-00000001","from":"discovered","to":"discovered"},
+    {"seq":2,"at":"2026-01-01T00:00:00Z","item":"PA-0002","call":"lease","worker":"countersign","lease_id":"L-00000002","from":"scored","to":"scored"},
+    {"seq":3,"at":"2026-01-01T00:00:00Z","item":"PA-0003","call":"lease","worker":"shakedown","lease_id":"L-00000003","from":"building","to":"building"},
+    {"seq":4,"at":"2026-01-01T00:00:00Z","item":"PA-0004","call":"lease","worker":"tidegauge","lease_id":"L-00000004","from":"live","to":"live"}
+  ],
+  "items_after": [
+    {"id":"PA-0001","state":"discovered","lane":"normal","queue":"leased","lease_id":"L-00000001","lease_worker":"trawl","lease_until":"2026-01-01T00:01:05Z"},
+    {"id":"PA-0002","state":"scored","lane":"normal","queue":"leased","lease_id":"L-00000002","lease_worker":"countersign","lease_until":"2026-01-01T00:01:00Z"},
+    {"id":"PA-0003","state":"building","lane":"normal","queue":"leased","lease_id":"L-00000003","lease_worker":"shakedown","lease_until":"2026-01-01T00:01:00Z"},
+    {"id":"PA-0004","state":"live","lane":"normal","queue":"leased","lease_id":"L-00000004","lease_worker":"tidegauge","lease_until":"2026-01-01T00:01:00Z"}
+  ]
+}

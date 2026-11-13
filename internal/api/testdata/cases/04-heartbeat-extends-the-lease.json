@@ -1,0 +1,23 @@
+{
+  "rule": "A heartbeat from the holder moves the end of the lease to one lease length after the heartbeat, and while the lease runs nobody else is given the item.",
+  "lease_seconds": 60,
+  "items": [
+    {"id":"PA-0001","state":"recorded","lane":"normal"}
+  ],
+  "steps": [
+    {"path":"/v1/lease","body":{"worker":"sextant","state":"recorded"},"status":200,"response":{"item":"PA-0001","state":"recorded","lane":"normal","lease_id":"L-00000001","expires_at":"2026-01-01T00:01:00Z"}},
+    {"after_seconds":30,"path":"/v1/heartbeat","body":{"worker":"sextant","item":"PA-0001","lease_id":"L-00000001"},"status":200,"response":{"item":"PA-0001","state":"recorded","lane":"normal","lease_id":"L-00000001","expires_at":"2026-01-01T00:01:30Z"}},
+    {"after_seconds":45,"path":"/v1/lease","body":{"worker":"sextant","state":"recorded"},"status":204},
+    {"after_seconds":10,"path":"/v1/heartbeat","body":{"worker":"sextant","item":"PA-0001","lease_id":"L-00000001"},"status":200,"response":{"item":"PA-0001","state":"recorded","lane":"normal","lease_id":"L-00000001","expires_at":"2026-01-01T00:02:25Z"}},
+    {"after_seconds":59,"path":"/v1/lease","body":{"worker":"sextant","state":"recorded"},"status":204},
+    {"after_seconds":1,"path":"/v1/lease","body":{"worker":"sextant","state":"recorded"},"status":200,"response":{"item":"PA-0001","state":"recorded","lane":"normal","lease_id":"L-00000002","expires_at":"2026-01-01T00:03:25Z"}}
+  ],
+  "ledger": [
+    {"seq":1,"at":"2026-01-01T00:00:00Z","item":"PA-0001","call":"lease","worker":"sextant","lease_id":"L-00000001","from":"recorded","to":"recorded"},
+    {"seq":2,"at":"2026-01-01T00:02:25Z","item":"PA-0001","call":"expire","worker":"sextant","lease_id":"L-00000001","from":"recorded","to":"recorded"},
+    {"seq":3,"at":"2026-01-01T00:02:25Z","item":"PA-0001","call":"lease","worker":"sextant","lease_id":"L-00000002","from":"recorded","to":"recorded"}
+  ],
+  "items_after": [
+    {"id":"PA-0001","state":"recorded","lane":"normal","queue":"leased","lease_id":"L-00000002","lease_worker":"sextant","lease_until":"2026-01-01T00:03:25Z"}
+  ]
+}

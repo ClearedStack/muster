@@ -1,0 +1,93 @@
+{
+  "states": [
+    "discovered",
+    "recorded",
+    "observed",
+    "screened-out",
+    "scored",
+    "approved",
+    "building",
+    "live",
+    "parked",
+    "linked",
+    "merged",
+    "rejected",
+    "retired",
+    "needs_subtool"
+  ],
+  "allowed": {
+    "discovered": [
+      "recorded",
+      "rejected"
+    ],
+    "recorded": [
+      "observed",
+      "needs_subtool"
+    ],
+    "observed": [
+      "scored",
+      "screened-out",
+      "needs_subtool"
+    ],
+    "screened-out": [
+      "observed"
+    ],
+    "scored": [
+      "approved",
+      "parked",
+      "linked",
+      "merged",
+      "rejected"
+    ],
+    "approved": [
+      "building",
+      "needs_subtool"
+    ],
+    "building": [
+      "live",
+      "parked"
+    ],
+    "live": [
+      "building",
+      "retired"
+    ],
+    "parked": [
+      "observed"
+    ],
+    "linked": [
+      "observed"
+    ],
+    "merged": [
+      "observed"
+    ],
+    "rejected": [],
+    "retired": [],
+    "needs_subtool": [
+      "recorded",
+      "observed",
+      "approved"
+    ]
+  },
+  "end": [
+    "rejected",
+    "retired"
+  ],
+  "can_pause": [
+    "recorded",
+    "observed",
+    "approved"
+  ],
+  "leasable": [
+    "discovered",
+    "recorded",
+    "observed",
+    "screened-out",
+    "scored",
+    "approved",
+    "building",
+    "live",
+    "parked",
+    "linked",
+    "merged"
+  ]
+}

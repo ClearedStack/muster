@@ -1,0 +1,41 @@
+{
+  "rule": "A worker that did not hear the answer sends its report again. The same report on the same lease gets the same answer and is recorded once. A different report on a lease already reported on is refused.",
+  "lease_seconds": 60,
+  "items": [
+    {"id":"PA-0001","state":"recorded","lane":"normal"},
+    {"id":"PA-0002","state":"recorded","lane":"normal"},
+    {"id":"PA-0003","state":"recorded","lane":"normal"}
+  ],
+  "steps": [
+    {"path":"/v1/lease","body":{"worker":"sextant","state":"recorded"},"status":200,"response":{"item":"PA-0001","state":"recorded","lane":"normal","lease_id":"L-00000001","expires_at":"2026-01-01T00:01:00Z"}},
+    {"path":"/v1/complete","body":{"worker":"sextant","item":"PA-0001","lease_id":"L-00000001","to":"observed","result":{"job":"made-up example"}},"status":200,"response":{"item":"PA-0001","state":"observed","queue":"waiting"}},
+    {"path":"/v1/complete","body":{"worker":"sextant","item":"PA-0001","lease_id":"L-00000001","to":"observed","result":{"job":"made-up example"}},"status":200,"response":{"item":"PA-0001","state":"observed","queue":"waiting"}},
+    {"path":"/v1/complete","raw":"{ \"result\": { \"job\" : \"made-up example\" }, \"to\":\"observed\", \"lease_id\":\"L-00000001\", \"item\":\"PA-0001\", \"worker\":\"sextant\" }","status":200,"response":{"item":"PA-0001","state":"observed","queue":"waiting"}},
+    {"path":"/v1/complete","body":{"worker":"sextant","item":"PA-0001","lease_id":"L-00000001","to":"observed","result":{"job":"another made-up example"}},"status":409,"response":{"error":{"code":"E_PARSE","message":"A different report was already recorded for that lease."}}},
+    {"path":"/v1/complete","body":{"worker":"sextant","item":"PA-0001","lease_id":"L-00000001","to":"observed"},"status":409,"response":{"error":{"code":"E_PARSE","message":"A different report was already recorded for that lease."}}},
+    {"path":"/v1/fail","body":{"worker":"sextant","item":"PA-0001","lease_id":"L-00000001","code":"E_PARSE"},"status":409,"response":{"error":{"code":"E_PARSE","message":"A different report was already recorded for that lease."}}},
+    {"path":"/v1/needs_subtool","body":{"worker":"sextant","item":"PA-0001","lease_id":"L-00000001"},"status":409,"response":{"error":{"code":"E_PARSE","message":"A different report was already recorded for that lease."}}},
+    {"path":"/v1/heartbeat","body":{"worker":"sextant","item":"PA-0001","lease_id":"L-00000001"},"status":409,"response":{"error":{"code":"E_PARSE","message":"This worker does not hold that lease on the item."}}},
+    {"path":"/v1/lease","body":{"worker":"sextant","state":"recorded"},"status":200,"response":{"item":"PA-0002","state":"recorded","lane":"normal","lease_id":"L-00000002","expires_at":"2026-01-01T00:01:00Z"}},
+    {"path":"/v1/fail","body":{"worker":"sextant","item":"PA-0002","lease_id":"L-00000002","code":"E_PARSE"},"status":200,"response":{"item":"PA-0002","state":"recorded","queue":"stopped"}},
+    {"path":"/v1/fail","body":{"worker":"sextant","item":"PA-0002","lease_id":"L-00000002","code":"E_PARSE"},"status":200,"response":{"item":"PA-0002","state":"recorded","queue":"stopped"}},
+    {"path":"/v1/fail","body":{"worker":"sextant","item":"PA-0002","lease_id":"L-00000002","code":"E_TIMEOUT"},"status":409,"response":{"error":{"code":"E_PARSE","message":"A different report was already recorded for that lease."}}},
+    {"path":"/v1/lease","body":{"worker":"sextant","state":"recorded"},"status":200,"response":{"item":"PA-0003","state":"recorded","lane":"normal","lease_id":"L-00000003","expires_at":"2026-01-01T00:01:00Z"}},
+    {"path":"/v1/needs_subtool","body":{"worker":"sextant","item":"PA-0003","lease_id":"L-00000003"},"status":200,"response":{"item":"PA-0003","state":"needs_subtool","queue":"idle"}},
+    {"path":"/v1/needs_subtool","body":{"worker":"sextant","item":"PA-0003","lease_id":"L-00000003"},"status":200,"response":{"item":"PA-0003","state":"needs_subtool","queue":"idle"}},
+    {"path":"/v1/complete","body":{"worker":"sextant","item":"PA-0003","lease_id":"L-00000003","to":"observed"},"status":409,"response":{"error":{"code":"E_PARSE","message":"A different report was already recorded for that lease."}}}
+  ],
+  "ledger": [
+    {"seq":1,"at":"2026-01-01T00:00:00Z","item":"PA-0001","call":"lease","worker":"sextant","lease_id":"L-00000001","from":"recorded","to":"recorded"},
+    {"seq":2,"at":"2026-01-01T00:00:00Z","item":"PA-0001","call":"complete","worker":"sextant","lease_id":"L-00000001","from":"recorded","to":"observed","result":{"job":"made-up example"}},
+    {"seq":3,"at":"2026-01-01T00:00:00Z","item":"PA-0002","call":"lease","worker":"sextant","lease_id":"L-00000002","from":"recorded","to":"recorded"},
+    {"seq":4,"at":"2026-01-01T00:00:00Z","item":"PA-0002","call":"fail","worker":"sextant","lease_id":"L-00000002","from":"recorded","to":"recorded","code":"E_PARSE"},
+    {"seq":5,"at":"2026-01-01T00:00:00Z","item":"PA-0003","call":"lease","worker":"sextant","lease_id":"L-00000003","from":"recorded","to":"recorded"},
+    {"seq":6,"at":"2026-01-01T00:00:00Z","item":"PA-0003","call":"needs_subtool","worker":"sextant","lease_id":"L-00000003","from":"recorded","to":"needs_subtool","code":"E_NEEDS_SUBTOOL"}
+  ],
+  "items_after": [
+    {"id":"PA-0001","state":"observed","lane":"normal","queue":"waiting"},
+    {"id":"PA-0002","state":"recorded","lane":"normal","queue":"stopped"},
+    {"id":"PA-0003","state":"needs_subtool","lane":"normal","queue":"idle","paused_from":"recorded","paused_by":"sextant"}
+  ]
+}
