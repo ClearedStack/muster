@@ -1,0 +1,62 @@
+{
+  "about": "The owner decides to keep a held item where it is. The release step ends and the item stays held.",
+  "given": {
+    "items": [
+      {
+        "id": "PA-0001",
+        "state": "recorded",
+        "lane": "normal",
+        "next": "sextant"
+      }
+    ],
+    "calls": [
+      {
+        "as": "sextant",
+        "method": "POST",
+        "path": "/v1/lease",
+        "body": {
+          "contract": "v1"
+        }
+      },
+      {
+        "as": "sextant",
+        "method": "POST",
+        "path": "/v1/fail",
+        "body": {
+          "contract": "v1",
+          "lease": "PA-0001.1",
+          "code": "E_PARSE"
+        }
+      },
+      {
+        "as": "countersign",
+        "method": "POST",
+        "path": "/v1/lease",
+        "body": {
+          "contract": "v1"
+        }
+      }
+    ]
+  },
+  "request": {
+    "as": "countersign",
+    "method": "POST",
+    "path": "/v1/complete",
+    "body": {
+      "contract": "v1",
+      "lease": "release:PA-0001.2",
+      "state": "recorded",
+      "result": {
+        "decision": "keep"
+      }
+    }
+  },
+  "expect": {
+    "status": 200,
+    "body": {
+      "id": "PA-0001",
+      "state": "recorded",
+      "held": true
+    }
+  }
+}

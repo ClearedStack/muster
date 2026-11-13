@@ -82,7 +82,6 @@ Every caller presents its Kubernetes ServiceAccount token as a bearer token. Mus
 | --- | --- |
 | `POST /v1/lease`, `/v1/heartbeat`, `/v1/complete`, `/v1/fail`, `/v1/needs_subtool` | any of the ten workers |
 | `POST /v1/items` | `trawl`, `conn` |
-| `POST /v1/release` | `countersign` |
 | `POST /v1/health` | `shipkeeper` |
 | `POST /v1/edits`, `GET /v1/feed` | `conn` |
 | `GET /healthz` | anyone; no token |
@@ -91,19 +90,19 @@ Every caller presents its Kubernetes ServiceAccount token as a bearer token. Mus
 
 | Call | Request | Answer |
 | --- | --- | --- |
-| `POST /v1/lease` | `contract` | `200` with `lease`, `kind`, `id`, `state`, `lane`, `attempt`, `expires`, and what the step is about: `found` and `results` for an item, `proposal` for a proposal, `incident` for an incident. `204` when there is nothing for this worker. |
+| `POST /v1/lease` | `contract` | `200` with `lease`, `kind`, `id`, `state`, `lane`, `attempt`, `expires`, and what the step is about: `found` and `results` for an item or a release, `proposal` and `results` for a proposal, `incident` for an incident. `204` when there is nothing for this worker. |
 | `POST /v1/heartbeat` | `contract`, `lease` | `200` with `lease` and the new `expires` |
-| `POST /v1/complete` | `contract`, `lease`, `state`, optional `result` (a JSON object) | `200` with `id`, `state` and `next` (the worker whose step follows, if any) |
+| `POST /v1/complete` | `contract`, `lease`, `state`, optional `result` (a JSON object) | `200` with `id`, `state`, and `next` (the worker whose step follows, if any) or `held` |
 | `POST /v1/fail` | `contract`, `lease`, `code` (`E_TIMEOUT` or `E_PARSE`) | `200` with `id`, `state`, and `next` or `held` |
 | `POST /v1/needs_subtool` | `contract`, `lease` | `200` with `id` and `state` |
 
-- **Kinds.** `kind` is `item`, `proposal` or `incident`, and says what the step is about.
+- **Kinds.** `kind` is `item`, `proposal`, `incident` or `release`, and says what the step is about.
 - **Found.** A lease on an item that was recorded through `POST /v1/items` carries `found`: its `source`, `title` and `address`, as they were recorded.
-- **Results.** Each worker's result is kept under that worker's name, and every later worker is given all of them: a lease on an item carries `results.trawl`, `results.sextant` and so on. A worker that completes a second step on the same item replaces its own earlier result and no one else's.
+- **Results.** `complete` takes an optional `result`, a JSON object, for items and proposals alike. Each worker's result is kept under that worker's name, and every later worker is given all of them: a lease on an item carries `results.trawl`, `results.sextant` and so on, and a lease on a proposal carries `results.countersign` once Countersign has given one. A worker that completes a second step on the same item replaces its own earlier result and no one else's. A `complete` with no `result` leaves the results as they are.
 - **Leases.** A lease lasts 60 seconds unless configured otherwise. A heartbeat moves its end to one lease length from now. When a lease runs out the step is offered again, and from then on the worker that lost it is refused. Until someone else takes the step, a late lease still counts, so a finished result that arrives late is kept.
 - **Repeats.** A worker repeats a call until it is acknowledged. Repeating the call that ended a lease gives the same answer and does nothing twice.
 - **`fail` with `E_TIMEOUT`.** The step stays in the queue, in its place, to be tried again.
-- **`fail` with `E_PARSE`.** Work on that item stops. It keeps its state and is not offered again until the owner releases it. Bellbuoy is given an incident step.
+- **`fail` with `E_PARSE`.** Work on that item stops. It keeps its state and is not offered again until the owner releases it. Bellbuoy is given an incident step and Countersign a release step.
 - **`needs_subtool`.** Allowed only where the state table allows it. The item moves to `needs_subtool` and leaves the queue, remembering the state it was in and the worker that paused it. Bellbuoy is given an incident step.
 - **Replay.** When Shipkeeper reports an image digest for a worker that differs from the last digest recorded for it, every item that worker paused returns to the state it was paused from, in the `urgent` lane, in the order the items were paused. The first digest ever reported for a worker is only recorded.
 - **Size.** A request body may be at most 64 KiB. The one exception is `complete` from Waybill, which carries a whole specification and may be at most 256 KiB.
@@ -118,13 +117,46 @@ An item that is stopped by `E_PARSE` or paused by `needs_subtool` gets one incid
 
 `id` is the item, `worker` is the worker that stopped, `code` is `E_PARSE` or `E_NEEDS_SUBTOOL`, and `state` is the state the item was in when the worker stopped. For a paused item that is the state it was paused from.
 
-An incident step changes no state. Bellbuoy completes it with the same `state` it was given and no `result`. Anything else is refused. An item has at most one incident step: if it is stopped again before Bellbuoy has dealt with the first, the newer incident takes its place.
+An incident step changes no state. Bellbuoy completes it with the same `state` it was given and no `result`: an incident is the one kind of step that takes none. Anything else is refused. An item has at most one incident step: if it is stopped again before Bellbuoy has dealt with the first, the newer incident takes its place.
 
 An item whose stored record contradicts the tables is set aside in the same way, with `code` `E_PARSE`, and gets an incident step too.
 
-## Release
+An item stopped by `E_PARSE` also gets a release step for Countersign; see **Release steps**. A paused item does not: it runs again by itself when its worker is redeployed.
 
-`POST /v1/release` with `contract` and `id` carries the owner's decision to let a stopped item run again. Countersign makes the call. The item keeps the state it was stopped in, and its step goes back to the worker it was for, at the end of the `urgent` lane. The answer is `200` with `id`, `state` and `next`. An item that is not stopped is refused with `move_not_allowed`.
+## Release steps
+
+An item that is stopped by `E_PARSE` is held: it keeps its state and its own step is not offered to anyone. It also gets one release step for Countersign, in the `normal` lane, so that the owner can decide whether it runs again.
+
+Countersign leases the release step like any other. The lease has `kind` `release`, the item as `id`, the state the item is held in as `state`, and `results.held`, which names the worker that stopped and the code it gave:
+
+```json
+{
+  "lease": "release:PA-0001.2",
+  "kind": "release",
+  "id": "PA-0001",
+  "state": "recorded",
+  "lane": "normal",
+  "attempt": 1,
+  "expires": "2026-01-05T09:01:00Z",
+  "results": {"held": {"worker": "sextant", "code": "E_PARSE"}}
+}
+```
+
+`results` also carries whatever earlier workers found, under their names, and the lease carries `found` if the item was recorded through `POST /v1/items`.
+
+Countersign ends the step with `POST /v1/complete`, giving the same `state` it was given and the owner's decision as the `result`:
+
+| `result` | What happens | Answer |
+| --- | --- | --- |
+| `{"decision": "release"}` | The item's own step goes back to the worker it was for, at the end of the `urgent` lane. The item keeps the state it was held in | `200` with `id`, `state` and `next`, the worker it goes back to |
+| `{"decision": "keep"}` | The item stays held. The release step ends, and nothing offers the item again | `200` with `id`, `state` and `"held": true` |
+
+- A `state` other than the one given is refused with `move_not_allowed`.
+- A `result` that is missing is refused with `missing_field`. One that has no `decision`, a decision other than these two, or any other field is refused with `bad_field`.
+- The decision is written to the ledger. It is not kept as `results.countersign`, so it does not replace what Countersign decided about the item earlier.
+- A release step can be failed with `E_TIMEOUT`, which puts it back in the queue. It cannot be paused.
+
+An item whose stored record contradicts the tables is held in the same way and gets a release step too.
 
 ## Recording a candidate
 
@@ -219,7 +251,7 @@ Conn calls `POST /v1/edits` with `contract`, `target`, `change`, `reason`, `pow`
 
 ## Proposal steps
 
-A proposal moves through its own statuses by the same lease and complete calls as an item. A decision on a proposal carries no `result`.
+A proposal moves through its own statuses by the same lease and complete calls as an item, and `complete` takes the same optional `result`. A result Countersign gives with its decision reaches Bellbuoy as `results.countersign`.
 
 | Worker | Holds a proposal in | Completes it to | Next step |
 | --- | --- | --- | --- |
