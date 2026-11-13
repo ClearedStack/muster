@@ -1,0 +1,22 @@
+{
+  "slug": "muster",
+  "name": "Muster",
+  "formerly": "hub-queue-api",
+  "kind": "control-plane",
+  "namespace": "clearedstack",
+  "responsibility": "Hands out work to the workers, records every result and change of state, and receives edit proposals.",
+  "interfaces": [
+    "Worker calls over cluster-private HTTP: lease, heartbeat, complete, fail, needs_subtool",
+    "Reads and writes Logbook's working records; the only service that does",
+    "Live update stream and edit-proposal intake for Conn",
+    "Receives health reports from Shipkeeper"
+  ],
+  "repository": "clearedstack.com",
+  "image": "muster",
+  "dependsOn": [
+    "logbook"
+  ],
+  "memory": "48 MiB",
+  "version": "v0.1.0-draft",
+  "subTools": []
+}
