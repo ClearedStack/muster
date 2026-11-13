@@ -1,0 +1,215 @@
+{
+  "about": "A proposal that passes the checks is kept as pending_approval and queued for Countersign. Approved, it goes to Bellbuoy in the urgent lane; declined, it goes nowhere.",
+  "steps": [
+    {
+      "note": "kept: the answer names the proposal and its status",
+      "as": "conn",
+      "method": "POST",
+      "path": "/v1/edits",
+      "send": {
+        "contract": "v1",
+        "target": "catalog/sample-calculator/description",
+        "change": "The sample description should say which made-up rule it follows.",
+        "reason": "It reads as if no rule applies.",
+        "pow": "2026-01-05.13ee87",
+        "honeypot": "",
+        "source": "203.0.113.7"
+      },
+      "status": 202,
+      "want": {
+        "id": "EP-0001",
+        "status": "pending_approval"
+      }
+    },
+    {
+      "as": "conn",
+      "method": "POST",
+      "path": "/v1/edits",
+      "send": {
+        "contract": "v1",
+        "target": "sextant/sample-portal/options",
+        "change": "Set the made-up option to 3.",
+        "reason": "",
+        "pow": "2026-01-05.7fd90",
+        "honeypot": "",
+        "source": "2001:db8::7"
+      },
+      "status": 202,
+      "want": {
+        "id": "EP-0002",
+        "status": "pending_approval"
+      }
+    },
+    {
+      "note": "Countersign is shown what kind of edit it is and which repository and file own the element",
+      "as": "countersign",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "EP-0001.1",
+        "kind": "proposal",
+        "id": "EP-0001",
+        "state": "pending_approval",
+        "lane": "normal",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z",
+        "proposal": {
+          "target": "catalog/sample-calculator/description",
+          "repository": "clearedstack.com",
+          "file": "src/data/sample-catalog.json",
+          "edit_kind": "DATA",
+          "change": "The sample description should say which made-up rule it follows.",
+          "reason": "It reads as if no rule applies."
+        }
+      }
+    },
+    {
+      "note": "a proposal cannot be paused for a missing rule",
+      "as": "countersign",
+      "method": "POST",
+      "path": "/v1/needs_subtool",
+      "send": {
+        "contract": "v1",
+        "lease": "EP-0001.1"
+      },
+      "status": 409,
+      "want": {
+        "error": "E_PARSE",
+        "reason": "that move is not allowed"
+      }
+    },
+    {
+      "note": "a decision carries no result, and there is nowhere to keep one",
+      "as": "countersign",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "EP-0001.1",
+        "state": "approved",
+        "result": {
+          "note": "made-up"
+        }
+      },
+      "status": 400,
+      "want": {
+        "error": "E_PARSE",
+        "reason": "a required field is missing or malformed"
+      }
+    },
+    {
+      "note": "approved: Bellbuoy is next, in the urgent lane",
+      "as": "countersign",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "EP-0001.1",
+        "state": "approved"
+      },
+      "status": 200,
+      "want": {
+        "id": "EP-0001",
+        "state": "approved",
+        "next": "bellbuoy"
+      }
+    },
+    {
+      "as": "countersign",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "EP-0002.2",
+        "kind": "proposal",
+        "id": "EP-0002",
+        "state": "pending_approval",
+        "lane": "normal",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z",
+        "proposal": {
+          "target": "sextant/sample-portal/options",
+          "repository": "sextant",
+          "file": "tools/sample-portal/options.json",
+          "edit_kind": "CONFIG",
+          "change": "Set the made-up option to 3.",
+          "reason": ""
+        }
+      }
+    },
+    {
+      "note": "declined: no step follows",
+      "as": "countersign",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "EP-0002.2",
+        "state": "declined"
+      },
+      "status": 200,
+      "want": {
+        "id": "EP-0002",
+        "state": "declined"
+      }
+    },
+    {
+      "as": "bellbuoy",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "EP-0001.3",
+        "kind": "proposal",
+        "id": "EP-0001",
+        "state": "approved",
+        "lane": "urgent",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z",
+        "proposal": {
+          "target": "catalog/sample-calculator/description",
+          "repository": "clearedstack.com",
+          "file": "src/data/sample-catalog.json",
+          "edit_kind": "DATA",
+          "change": "The sample description should say which made-up rule it follows.",
+          "reason": "It reads as if no rule applies."
+        }
+      }
+    },
+    {
+      "as": "bellbuoy",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "EP-0001.3",
+        "state": "building"
+      },
+      "status": 200,
+      "want": {
+        "id": "EP-0001",
+        "state": "building"
+      }
+    },
+    {
+      "note": "nothing else is Bellbuoy's",
+      "as": "bellbuoy",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 204
+    }
+  ]
+}

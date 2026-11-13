@@ -1,0 +1,19 @@
+{
+  "elements": {
+    "catalog/sample-calculator/description": {
+      "repository": "clearedstack.com",
+      "file": "src/data/sample-catalog.json",
+      "kind": "DATA"
+    },
+    "sextant/sample-portal/options": {
+      "repository": "sextant",
+      "file": "tools/sample-portal/options.json",
+      "kind": "CONFIG"
+    },
+    "assay/sample-profile/report": {
+      "repository": "assay",
+      "file": "tools/sample-profile/README.md",
+      "kind": "ISSUE"
+    }
+  }
+}

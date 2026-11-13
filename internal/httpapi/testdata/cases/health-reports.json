@@ -1,0 +1,244 @@
+{
+  "about": "Shipkeeper's report is a closed form: a component from the registry, one of four states, optionally one of the three codes and an image digest. Anything else is refused whole, so there is no field a node name or an address could travel in.",
+  "steps": [
+    {
+      "note": "a good batch",
+      "as": "shipkeeper",
+      "method": "POST",
+      "path": "/v1/health",
+      "send": {
+        "contract": "v1",
+        "reports": [
+          {
+            "component": "sextant",
+            "state": "healthy",
+            "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+          },
+          {
+            "component": "logbook",
+            "state": "idle"
+          },
+          {
+            "component": "assay",
+            "state": "degraded",
+            "code": "E_TIMEOUT"
+          },
+          {
+            "component": "trawl",
+            "state": "paused"
+          }
+        ]
+      },
+      "status": 200,
+      "want": {
+        "received": 4,
+        "replayed": 0
+      }
+    },
+    {
+      "note": "a field the form does not have",
+      "as": "shipkeeper",
+      "method": "POST",
+      "path": "/v1/health",
+      "send": {
+        "contract": "v1",
+        "reports": [
+          {
+            "component": "sextant",
+            "state": "healthy",
+            "node": "made-up-node-name"
+          }
+        ]
+      },
+      "status": 400,
+      "want": {
+        "error": "E_PARSE",
+        "reason": "the request could not be read"
+      }
+    },
+    {
+      "as": "shipkeeper",
+      "method": "POST",
+      "path": "/v1/health",
+      "send": {
+        "contract": "v1",
+        "reports": [
+          {
+            "component": "sextant",
+            "state": "healthy",
+            "message": "made-up text"
+          }
+        ]
+      },
+      "status": 400,
+      "want": {
+        "error": "E_PARSE",
+        "reason": "the request could not be read"
+      }
+    },
+    {
+      "note": "not in the registry",
+      "as": "shipkeeper",
+      "method": "POST",
+      "path": "/v1/health",
+      "send": {
+        "contract": "v1",
+        "reports": [
+          {
+            "component": "made-up-component",
+            "state": "healthy"
+          }
+        ]
+      },
+      "status": 400,
+      "want": {
+        "error": "E_PARSE",
+        "reason": "a required field is missing or malformed"
+      }
+    },
+    {
+      "note": "a state Shipkeeper is not known to send: valid and unfamiliar",
+      "as": "shipkeeper",
+      "method": "POST",
+      "path": "/v1/health",
+      "send": {
+        "contract": "v1",
+        "reports": [
+          {
+            "component": "sextant",
+            "state": "erroring"
+          }
+        ]
+      },
+      "status": 422,
+      "want": {
+        "error": "E_NEEDS_SUBTOOL",
+        "reason": "this health state is not known"
+      }
+    },
+    {
+      "note": "not one of the three codes",
+      "as": "shipkeeper",
+      "method": "POST",
+      "path": "/v1/health",
+      "send": {
+        "contract": "v1",
+        "reports": [
+          {
+            "component": "sextant",
+            "state": "healthy",
+            "code": "E_OTHER"
+          }
+        ]
+      },
+      "status": 400,
+      "want": {
+        "error": "E_PARSE",
+        "reason": "a required field is missing or malformed"
+      }
+    },
+    {
+      "note": "not a digest",
+      "as": "shipkeeper",
+      "method": "POST",
+      "path": "/v1/health",
+      "send": {
+        "contract": "v1",
+        "reports": [
+          {
+            "component": "sextant",
+            "state": "healthy",
+            "digest": "latest"
+          }
+        ]
+      },
+      "status": 400,
+      "want": {
+        "error": "E_PARSE",
+        "reason": "a required field is missing or malformed"
+      }
+    },
+    {
+      "note": "the same component twice",
+      "as": "shipkeeper",
+      "method": "POST",
+      "path": "/v1/health",
+      "send": {
+        "contract": "v1",
+        "reports": [
+          {
+            "component": "sextant",
+            "state": "healthy"
+          },
+          {
+            "component": "sextant",
+            "state": "idle"
+          }
+        ]
+      },
+      "status": 400,
+      "want": {
+        "error": "E_PARSE",
+        "reason": "a required field is missing or malformed"
+      }
+    },
+    {
+      "note": "no state",
+      "as": "shipkeeper",
+      "method": "POST",
+      "path": "/v1/health",
+      "send": {
+        "contract": "v1",
+        "reports": [
+          {
+            "component": "sextant"
+          }
+        ]
+      },
+      "status": 400,
+      "want": {
+        "error": "E_PARSE",
+        "reason": "a required field is missing or malformed"
+      }
+    },
+    {
+      "note": "no reports",
+      "as": "shipkeeper",
+      "method": "POST",
+      "path": "/v1/health",
+      "send": {
+        "contract": "v1",
+        "reports": []
+      },
+      "status": 400,
+      "want": {
+        "error": "E_PARSE",
+        "reason": "a required field is missing or malformed"
+      }
+    },
+    {
+      "note": "one bad report refuses the whole batch",
+      "as": "shipkeeper",
+      "method": "POST",
+      "path": "/v1/health",
+      "send": {
+        "contract": "v1",
+        "reports": [
+          {
+            "component": "assay",
+            "state": "healthy"
+          },
+          {
+            "component": "made-up-component",
+            "state": "healthy"
+          }
+        ]
+      },
+      "status": 400,
+      "want": {
+        "error": "E_PARSE",
+        "reason": "a required field is missing or malformed"
+      }
+    }
+  ]
+}

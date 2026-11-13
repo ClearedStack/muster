@@ -1,0 +1,169 @@
+{
+  "about": "A completion must be a move the tables allow, and a move that is this worker's to make. A refusal changes nothing.",
+  "seed": {
+    "items": [
+      {
+        "id": "PA-0001",
+        "state": "recorded",
+        "lane": "normal",
+        "next": "sextant"
+      },
+      {
+        "id": "PA-0002",
+        "state": "approved",
+        "lane": "normal",
+        "next": "waybill"
+      }
+    ]
+  },
+  "steps": [
+    {
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0001.1",
+        "kind": "item",
+        "id": "PA-0001",
+        "state": "recorded",
+        "lane": "normal",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z"
+      }
+    },
+    {
+      "note": "recorded may not go straight to scored",
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0001.1",
+        "state": "scored"
+      },
+      "status": 409,
+      "want": {
+        "error": "E_PARSE",
+        "reason": "that move is not allowed"
+      }
+    },
+    {
+      "note": "Sextant has no step that leaves the state unchanged",
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0001.1",
+        "state": "recorded"
+      },
+      "status": 409,
+      "want": {
+        "error": "E_PARSE",
+        "reason": "that move is not allowed"
+      }
+    },
+    {
+      "note": "not one of the fourteen states",
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0001.1",
+        "state": "finished"
+      },
+      "status": 409,
+      "want": {
+        "error": "E_PARSE",
+        "reason": "that move is not allowed"
+      }
+    },
+    {
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0001.1",
+        "state": "live"
+      },
+      "status": 409,
+      "want": {
+        "error": "E_PARSE",
+        "reason": "that move is not allowed"
+      }
+    },
+    {
+      "as": "waybill",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0002.2",
+        "kind": "item",
+        "id": "PA-0002",
+        "state": "approved",
+        "lane": "normal",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z"
+      }
+    },
+    {
+      "note": "approved to building is allowed, and it is Moldloft's move, not Waybill's",
+      "as": "waybill",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0002.2",
+        "state": "building"
+      },
+      "status": 409,
+      "want": {
+        "error": "E_PARSE",
+        "reason": "that move is not allowed"
+      }
+    },
+    {
+      "note": "the refusals changed nothing: the allowed move still works",
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0001.1",
+        "state": "observed"
+      },
+      "status": 200,
+      "want": {
+        "id": "PA-0001",
+        "state": "observed",
+        "next": "assay"
+      }
+    },
+    {
+      "as": "waybill",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0002.2",
+        "state": "approved"
+      },
+      "status": 200,
+      "want": {
+        "id": "PA-0002",
+        "state": "approved",
+        "next": "moldloft"
+      }
+    }
+  ]
+}

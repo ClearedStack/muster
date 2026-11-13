@@ -1,0 +1,112 @@
+{
+  "about": "A lease that runs out stops protecting its item. The item is offered again, and the worker that lost it is refused.",
+  "seed": {
+    "items": [
+      {
+        "id": "PA-0001",
+        "state": "recorded",
+        "lane": "normal",
+        "next": "sextant"
+      }
+    ]
+  },
+  "steps": [
+    {
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0001.1",
+        "kind": "item",
+        "id": "PA-0001",
+        "state": "recorded",
+        "lane": "normal",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z"
+      }
+    },
+    {
+      "note": "59 seconds in the lease still protects the item",
+      "wait": "59s",
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 204
+    },
+    {
+      "note": "at 60 seconds it does not: second attempt, new lease",
+      "wait": "1s",
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0001.2",
+        "kind": "item",
+        "id": "PA-0001",
+        "state": "recorded",
+        "lane": "normal",
+        "attempt": 2,
+        "expires": "2026-01-05T09:02:00Z"
+      }
+    },
+    {
+      "note": "the old lease is gone",
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/heartbeat",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0001.1"
+      },
+      "status": 409,
+      "want": {
+        "error": "E_PARSE",
+        "reason": "the lease is not held"
+      }
+    },
+    {
+      "note": "and cannot complete the step",
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0001.1",
+        "state": "observed"
+      },
+      "status": 409,
+      "want": {
+        "error": "E_PARSE",
+        "reason": "the lease is not held"
+      }
+    },
+    {
+      "note": "the new lease can",
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0001.2",
+        "state": "observed"
+      },
+      "status": 200,
+      "want": {
+        "id": "PA-0001",
+        "state": "observed",
+        "next": "assay"
+      }
+    }
+  ]
+}

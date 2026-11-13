@@ -1,0 +1,299 @@
+{
+  "about": "Check 3. Submissions are counted for each source address for one day. The sixth from one source is refused; another source is not affected; the next day the count starts again.",
+  "steps": [
+    {
+      "as": "conn",
+      "method": "POST",
+      "path": "/v1/edits",
+      "send": {
+        "contract": "v1",
+        "target": "catalog/sample-calculator/description",
+        "change": "Made-up change 1.",
+        "reason": "It reads as if no rule applies.",
+        "pow": "2026-01-05.af6db",
+        "honeypot": "",
+        "source": "203.0.113.7"
+      },
+      "status": 202,
+      "want": {
+        "id": "EP-0001",
+        "status": "pending_approval"
+      }
+    },
+    {
+      "as": "conn",
+      "method": "POST",
+      "path": "/v1/edits",
+      "send": {
+        "contract": "v1",
+        "target": "catalog/sample-calculator/description",
+        "change": "Made-up change 2.",
+        "reason": "It reads as if no rule applies.",
+        "pow": "2026-01-05.124949",
+        "honeypot": "",
+        "source": "203.0.113.7"
+      },
+      "status": 202,
+      "want": {
+        "id": "EP-0002",
+        "status": "pending_approval"
+      }
+    },
+    {
+      "as": "conn",
+      "method": "POST",
+      "path": "/v1/edits",
+      "send": {
+        "contract": "v1",
+        "target": "catalog/sample-calculator/description",
+        "change": "Made-up change 3.",
+        "reason": "It reads as if no rule applies.",
+        "pow": "2026-01-05.1a687b",
+        "honeypot": "",
+        "source": "203.0.113.7"
+      },
+      "status": 202,
+      "want": {
+        "id": "EP-0003",
+        "status": "pending_approval"
+      }
+    },
+    {
+      "as": "conn",
+      "method": "POST",
+      "path": "/v1/edits",
+      "send": {
+        "contract": "v1",
+        "target": "catalog/sample-calculator/description",
+        "change": "Made-up change 4.",
+        "reason": "It reads as if no rule applies.",
+        "pow": "2026-01-05.2ca30",
+        "honeypot": "",
+        "source": "203.0.113.7"
+      },
+      "status": 202,
+      "want": {
+        "id": "EP-0004",
+        "status": "pending_approval"
+      }
+    },
+    {
+      "note": "the fifth of the day is kept",
+      "as": "conn",
+      "method": "POST",
+      "path": "/v1/edits",
+      "send": {
+        "contract": "v1",
+        "target": "catalog/sample-calculator/description",
+        "change": "Made-up change 5.",
+        "reason": "It reads as if no rule applies.",
+        "pow": "2026-01-05.1a9b2b",
+        "honeypot": "",
+        "source": "203.0.113.7"
+      },
+      "status": 202,
+      "want": {
+        "id": "EP-0005",
+        "status": "pending_approval"
+      }
+    },
+    {
+      "note": "the sixth is not",
+      "as": "conn",
+      "method": "POST",
+      "path": "/v1/edits",
+      "send": {
+        "contract": "v1",
+        "target": "catalog/sample-calculator/description",
+        "change": "Made-up change 6.",
+        "reason": "It reads as if no rule applies.",
+        "pow": "2026-01-05.23ef2",
+        "honeypot": "",
+        "source": "203.0.113.7"
+      },
+      "status": 429,
+      "want": {
+        "error": "E_TIMEOUT",
+        "reason": "too many submissions from this source today; try again tomorrow"
+      }
+    },
+    {
+      "note": "another source has a count of its own",
+      "as": "conn",
+      "method": "POST",
+      "path": "/v1/edits",
+      "send": {
+        "contract": "v1",
+        "target": "catalog/sample-calculator/description",
+        "change": "Made-up change 7.",
+        "reason": "It reads as if no rule applies.",
+        "pow": "2026-01-05.3da93",
+        "honeypot": "",
+        "source": "198.51.100.20"
+      },
+      "status": 202,
+      "want": {
+        "id": "EP-0006",
+        "status": "pending_approval"
+      }
+    },
+    {
+      "note": "the same address written the IPv6 way is the same source",
+      "as": "conn",
+      "method": "POST",
+      "path": "/v1/edits",
+      "send": {
+        "contract": "v1",
+        "target": "catalog/sample-calculator/description",
+        "change": "Made-up change 8.",
+        "reason": "It reads as if no rule applies.",
+        "pow": "2026-01-05.97757",
+        "honeypot": "",
+        "source": "::ffff:203.0.113.7"
+      },
+      "status": 429,
+      "want": {
+        "error": "E_TIMEOUT",
+        "reason": "too many submissions from this source today; try again tomorrow"
+      }
+    },
+    {
+      "note": "a submission that fails a later check still counts: this is the first from this source",
+      "as": "conn",
+      "method": "POST",
+      "path": "/v1/edits",
+      "send": {
+        "contract": "v1",
+        "target": "made-up/target",
+        "change": "Made-up change 9.",
+        "reason": "It reads as if no rule applies.",
+        "pow": "2026-01-05.172359",
+        "honeypot": "",
+        "source": "192.0.2.44"
+      },
+      "status": 400,
+      "want": {
+        "error": "E_PARSE",
+        "reason": "the target is not in the ownership map"
+      }
+    },
+    {
+      "as": "conn",
+      "method": "POST",
+      "path": "/v1/edits",
+      "send": {
+        "contract": "v1",
+        "target": "catalog/sample-calculator/description",
+        "change": "Made-up change 10.",
+        "reason": "It reads as if no rule applies.",
+        "pow": "2026-01-05.248b4c",
+        "honeypot": "",
+        "source": "192.0.2.44"
+      },
+      "status": 202,
+      "want": {
+        "id": "EP-0007",
+        "status": "pending_approval"
+      }
+    },
+    {
+      "as": "conn",
+      "method": "POST",
+      "path": "/v1/edits",
+      "send": {
+        "contract": "v1",
+        "target": "catalog/sample-calculator/description",
+        "change": "Made-up change 11.",
+        "reason": "It reads as if no rule applies.",
+        "pow": "2026-01-05.7a046",
+        "honeypot": "",
+        "source": "192.0.2.44"
+      },
+      "status": 202,
+      "want": {
+        "id": "EP-0008",
+        "status": "pending_approval"
+      }
+    },
+    {
+      "as": "conn",
+      "method": "POST",
+      "path": "/v1/edits",
+      "send": {
+        "contract": "v1",
+        "target": "catalog/sample-calculator/description",
+        "change": "Made-up change 12.",
+        "reason": "It reads as if no rule applies.",
+        "pow": "2026-01-05.70a3d",
+        "honeypot": "",
+        "source": "192.0.2.44"
+      },
+      "status": 202,
+      "want": {
+        "id": "EP-0009",
+        "status": "pending_approval"
+      }
+    },
+    {
+      "note": "its fifth",
+      "as": "conn",
+      "method": "POST",
+      "path": "/v1/edits",
+      "send": {
+        "contract": "v1",
+        "target": "catalog/sample-calculator/description",
+        "change": "Made-up change 13.",
+        "reason": "It reads as if no rule applies.",
+        "pow": "2026-01-05.e04c4",
+        "honeypot": "",
+        "source": "192.0.2.44"
+      },
+      "status": 202,
+      "want": {
+        "id": "EP-0010",
+        "status": "pending_approval"
+      }
+    },
+    {
+      "note": "its sixth",
+      "as": "conn",
+      "method": "POST",
+      "path": "/v1/edits",
+      "send": {
+        "contract": "v1",
+        "target": "catalog/sample-calculator/description",
+        "change": "Made-up change 14.",
+        "reason": "It reads as if no rule applies.",
+        "pow": "2026-01-05.18da6",
+        "honeypot": "",
+        "source": "192.0.2.44"
+      },
+      "status": 429,
+      "want": {
+        "error": "E_TIMEOUT",
+        "reason": "too many submissions from this source today; try again tomorrow"
+      }
+    },
+    {
+      "note": "the next day the first source starts from nothing",
+      "wait": "24h",
+      "as": "conn",
+      "method": "POST",
+      "path": "/v1/edits",
+      "send": {
+        "contract": "v1",
+        "target": "catalog/sample-calculator/description",
+        "change": "Made-up change 15.",
+        "reason": "It reads as if no rule applies.",
+        "pow": "2026-01-06.10183e",
+        "honeypot": "",
+        "source": "203.0.113.7"
+      },
+      "status": 202,
+      "want": {
+        "id": "EP-0011",
+        "status": "pending_approval"
+      }
+    }
+  ]
+}

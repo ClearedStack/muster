@@ -1,0 +1,110 @@
+{
+  "about": "E_PARSE: the data was broken. Work on that item stops. It keeps its state and is not offered again; the rest of the queue carries on.",
+  "seed": {
+    "items": [
+      {
+        "id": "PA-0001",
+        "state": "recorded",
+        "lane": "normal",
+        "next": "sextant"
+      },
+      {
+        "id": "PA-0002",
+        "state": "recorded",
+        "lane": "normal",
+        "next": "sextant"
+      }
+    ]
+  },
+  "steps": [
+    {
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0001.1",
+        "kind": "item",
+        "id": "PA-0001",
+        "state": "recorded",
+        "lane": "normal",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z"
+      }
+    },
+    {
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/fail",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0001.1",
+        "code": "E_PARSE"
+      },
+      "status": 200,
+      "want": {
+        "id": "PA-0001",
+        "state": "recorded",
+        "held": true
+      }
+    },
+    {
+      "note": "the next item, not the stopped one",
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0002.2",
+        "kind": "item",
+        "id": "PA-0002",
+        "state": "recorded",
+        "lane": "normal",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z"
+      }
+    },
+    {
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0002.2",
+        "state": "observed"
+      },
+      "status": 200,
+      "want": {
+        "id": "PA-0002",
+        "state": "observed",
+        "next": "assay"
+      }
+    },
+    {
+      "note": "the stopped item is never offered",
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 204
+    },
+    {
+      "wait": "24h",
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 204
+    }
+  ]
+}

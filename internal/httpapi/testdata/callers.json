@@ -1,0 +1,16 @@
+{
+  "callers": {
+    "made-up-token-for-trawl": "trawl",
+    "made-up-token-for-sextant": "sextant",
+    "made-up-token-for-assay": "assay",
+    "made-up-token-for-countersign": "countersign",
+    "made-up-token-for-waybill": "waybill",
+    "made-up-token-for-moldloft": "moldloft",
+    "made-up-token-for-shakedown": "shakedown",
+    "made-up-token-for-chartroom": "chartroom",
+    "made-up-token-for-tidegauge": "tidegauge",
+    "made-up-token-for-bellbuoy": "bellbuoy",
+    "made-up-token-for-conn": "conn",
+    "made-up-token-for-shipkeeper": "shipkeeper"
+  }
+}

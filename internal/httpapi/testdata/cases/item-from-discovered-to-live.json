@@ -1,0 +1,393 @@
+{
+  "about": "One item walks the whole pipeline. Each completion changes the state and queues the next worker's step, and each worker is shown the results of those before it.",
+  "seed": {
+    "items": [
+      {
+        "id": "PA-0001",
+        "state": "discovered",
+        "lane": "normal",
+        "next": "trawl"
+      }
+    ]
+  },
+  "steps": [
+    {
+      "as": "trawl",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0001.1",
+        "kind": "item",
+        "id": "PA-0001",
+        "state": "discovered",
+        "lane": "normal",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z"
+      }
+    },
+    {
+      "as": "trawl",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0001.1",
+        "state": "recorded",
+        "result": {
+          "source": "made-up source"
+        }
+      },
+      "status": 200,
+      "want": {
+        "id": "PA-0001",
+        "state": "recorded",
+        "next": "sextant"
+      }
+    },
+    {
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0001.2",
+        "kind": "item",
+        "id": "PA-0001",
+        "state": "recorded",
+        "lane": "normal",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z",
+        "results": {
+          "trawl": {
+            "source": "made-up source"
+          }
+        }
+      }
+    },
+    {
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0001.2",
+        "state": "observed",
+        "result": {
+          "job": "made-up job"
+        }
+      },
+      "status": 200,
+      "want": {
+        "id": "PA-0001",
+        "state": "observed",
+        "next": "assay"
+      }
+    },
+    {
+      "as": "assay",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0001.3",
+        "kind": "item",
+        "id": "PA-0001",
+        "state": "observed",
+        "lane": "normal",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z",
+        "results": {
+          "sextant": {
+            "job": "made-up job"
+          },
+          "trawl": {
+            "source": "made-up source"
+          }
+        }
+      }
+    },
+    {
+      "as": "assay",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0001.3",
+        "state": "scored",
+        "result": {
+          "score": 71
+        }
+      },
+      "status": 200,
+      "want": {
+        "id": "PA-0001",
+        "state": "scored",
+        "next": "countersign"
+      }
+    },
+    {
+      "as": "countersign",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0001.4",
+        "kind": "item",
+        "id": "PA-0001",
+        "state": "scored",
+        "lane": "normal",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z",
+        "results": {
+          "assay": {
+            "score": 71
+          },
+          "sextant": {
+            "job": "made-up job"
+          },
+          "trawl": {
+            "source": "made-up source"
+          }
+        }
+      }
+    },
+    {
+      "as": "countersign",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0001.4",
+        "state": "approved"
+      },
+      "status": 200,
+      "want": {
+        "id": "PA-0001",
+        "state": "approved",
+        "next": "waybill"
+      }
+    },
+    {
+      "as": "waybill",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0001.5",
+        "kind": "item",
+        "id": "PA-0001",
+        "state": "approved",
+        "lane": "normal",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z",
+        "results": {
+          "assay": {
+            "score": 71
+          },
+          "sextant": {
+            "job": "made-up job"
+          },
+          "trawl": {
+            "source": "made-up source"
+          }
+        }
+      }
+    },
+    {
+      "note": "Waybill finishes its step; the state stays approved",
+      "as": "waybill",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0001.5",
+        "state": "approved",
+        "result": {
+          "specification": "made-up specification"
+        }
+      },
+      "status": 200,
+      "want": {
+        "id": "PA-0001",
+        "state": "approved",
+        "next": "moldloft"
+      }
+    },
+    {
+      "as": "moldloft",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0001.6",
+        "kind": "item",
+        "id": "PA-0001",
+        "state": "approved",
+        "lane": "normal",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z",
+        "results": {
+          "assay": {
+            "score": 71
+          },
+          "sextant": {
+            "job": "made-up job"
+          },
+          "trawl": {
+            "source": "made-up source"
+          },
+          "waybill": {
+            "specification": "made-up specification"
+          }
+        }
+      }
+    },
+    {
+      "as": "moldloft",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0001.6",
+        "state": "building"
+      },
+      "status": 200,
+      "want": {
+        "id": "PA-0001",
+        "state": "building",
+        "next": "shakedown"
+      }
+    },
+    {
+      "as": "shakedown",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0001.7",
+        "kind": "item",
+        "id": "PA-0001",
+        "state": "building",
+        "lane": "normal",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z",
+        "results": {
+          "assay": {
+            "score": 71
+          },
+          "sextant": {
+            "job": "made-up job"
+          },
+          "trawl": {
+            "source": "made-up source"
+          },
+          "waybill": {
+            "specification": "made-up specification"
+          }
+        }
+      }
+    },
+    {
+      "note": "Shakedown finishes its step; the state stays building",
+      "as": "shakedown",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0001.7",
+        "state": "building",
+        "result": {
+          "conditions_passed": 5
+        }
+      },
+      "status": 200,
+      "want": {
+        "id": "PA-0001",
+        "state": "building",
+        "next": "chartroom"
+      }
+    },
+    {
+      "as": "chartroom",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0001.8",
+        "kind": "item",
+        "id": "PA-0001",
+        "state": "building",
+        "lane": "normal",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z",
+        "results": {
+          "assay": {
+            "score": 71
+          },
+          "sextant": {
+            "job": "made-up job"
+          },
+          "shakedown": {
+            "conditions_passed": 5
+          },
+          "trawl": {
+            "source": "made-up source"
+          },
+          "waybill": {
+            "specification": "made-up specification"
+          }
+        }
+      }
+    },
+    {
+      "note": "no step follows",
+      "as": "chartroom",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0001.8",
+        "state": "live"
+      },
+      "status": 200,
+      "want": {
+        "id": "PA-0001",
+        "state": "live"
+      }
+    },
+    {
+      "as": "chartroom",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 204
+    }
+  ]
+}

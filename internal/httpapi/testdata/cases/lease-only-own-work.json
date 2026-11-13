@@ -1,0 +1,57 @@
+{
+  "about": "A worker is offered only steps that are its own. Tidegauge has no steps yet and is always told there is nothing.",
+  "seed": {
+    "items": [
+      {
+        "id": "PA-0001",
+        "state": "recorded",
+        "lane": "normal",
+        "next": "sextant"
+      },
+      {
+        "id": "PA-0002",
+        "state": "live",
+        "lane": "normal"
+      }
+    ]
+  },
+  "steps": [
+    {
+      "note": "the only waiting item is Sextant's",
+      "as": "assay",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 204
+    },
+    {
+      "as": "tidegauge",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 204
+    },
+    {
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0001.1",
+        "kind": "item",
+        "id": "PA-0001",
+        "state": "recorded",
+        "lane": "normal",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z"
+      }
+    }
+  ]
+}
