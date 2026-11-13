@@ -84,7 +84,7 @@ func TestBodySizeLimits(t *testing.T) {
 			t.Errorf("%s from Waybill: %v", path, p)
 		}
 	}
-	for path, as := range map[string]string{"/v1/items": "trawl", "/v1/release": "countersign", "/v1/health": "shipkeeper", "/v1/edits": "conn"} {
+	for path, as := range map[string]string{"/v1/items": "trawl", "/v1/health": "shipkeeper", "/v1/edits": "conn"} {
 		if p := refusalOf(t, s.do(t, post(path, as, big))); p != contract.TooLarge {
 			t.Errorf("%s: %v", path, p)
 		}
@@ -114,7 +114,6 @@ func TestSlowStoreIsATimeout(t *testing.T) {
 		post("/v1/fail", "sextant", map[string]string{"contract": "v1", "lease": "PA-0001.1", "code": "E_PARSE"}),
 		post("/v1/needs_subtool", "sextant", map[string]string{"contract": "v1", "lease": "PA-0001.1"}),
 		post("/v1/health", "shipkeeper", map[string]any{"contract": "v1", "reports": []map[string]string{{"component": "sextant", "state": "healthy"}}}),
-		post("/v1/release", "countersign", map[string]string{"contract": "v1", "id": "PA-0001"}),
 		post("/v1/items", "trawl", map[string]string{"contract": "v1", "source": "sam-gov", "title": "A made-up title", "address": "https://example.org/made-up"}),
 		example.Steps[0],
 		{Method: http.MethodGet, Path: "/v1/feed", As: "conn"},

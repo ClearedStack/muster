@@ -83,7 +83,8 @@ Choices the contract left to the build, each easy to change and each pinned by a
 
 - **The cause `duplicate`** is used in one place: a batch of health reports that names the same component twice.
 - **A slow identity check** answers `503` with the cause `busy`, since `store_slow` would name the wrong thing.
-- **Release** is its own call, `POST /v1/release`, made by Countersign, because a stopped item is never offered for lease.
+- **A release step** is in the `normal` lane. A decision to keep ends the step, and nothing offers that item again.
+- **The owner's decision on a release step** is written to the ledger and is not kept as `results.countersign`, so it does not replace what Countersign decided about the item earlier.
 - **A new item's lane** follows its source: `web-sweep` starts in `backfill`, the other three in `normal`.
 - **A `site-form` candidate** carries two more fields than the others, `pow` and `visitor`, because the proof of work and the daily limit need them. It shares one daily count with that visitor's edit proposals.
 - **An incident step** is in the `normal` lane, and its `state` is the state the item was in when the worker stopped.
@@ -105,7 +106,8 @@ Choices the contract left to the build, each easy to change and each pinned by a
 | Gave every refusal a `cause` | The three codes cannot tell a caller what to do next; the cause can |
 | Added `POST /v1/items` | Nothing could record a new candidate |
 | Raised Waybill's `complete` to 256 KiB and set every other body to 64 KiB | A specification is larger than any other result |
-| Added the seven-day Tidegauge check, Bellbuoy's incident step, the move of a proposal to `live` and the owner's release | These were open questions; each now has a rule |
+| Added the seven-day Tidegauge check, Bellbuoy's incident step, the move of a proposal to `live` and Countersign's release step | These were open questions; each now has a rule |
+| Let `complete` take a result for a proposal as it does for an item | One rule for every step a worker completes, and Bellbuoy needs what Countersign decided |
 
 ## Related pages
 

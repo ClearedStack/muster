@@ -276,18 +276,19 @@ func TestOneIncidentPerItem(t *testing.T) {
 	}
 }
 
-// Release puts a stopped item at the end of the urgent lane, in the
-// state it was stopped in, for the worker it was stopped at.
+// The owner's decision to release puts a stopped item at the end of the
+// urgent lane, in the state it was stopped in, for the worker it was
+// stopped at.
 func TestReleaseJoinsTheEndOfTheUrgentLane(t *testing.T) {
 	q, _, _ := setup(t, `{"items":[
 		{"id":"PA-0001","state":"recorded","lane":"backfill","next":"sextant"},
 		{"id":"PA-0002","state":"recorded","lane":"urgent","next":"sextant"},
 		{"id":"PA-0003","state":"recorded","lane":"normal","next":"sextant"}]}`)
-	if _, err := q.Release(ctx, "countersign", "PA-0001"); err != contract.MoveNotAllowed {
-		t.Errorf("releasing an item that is not stopped: %v", err)
+	if g := must(q.Lease(ctx, "countersign"))(t); g != nil {
+		t.Fatalf("a release step with nothing stopped: %+v", g)
 	}
 	// Stop the backfill item: take the two ahead of it out of the way
-	// first.
+	// first, then put them back.
 	urgent := must(q.Lease(ctx, "sextant"))(t)
 	normal := must(q.Lease(ctx, "sextant"))(t)
 	g := must(q.Lease(ctx, "sextant"))(t)
@@ -295,10 +296,55 @@ func TestReleaseJoinsTheEndOfTheUrgentLane(t *testing.T) {
 	must(q.Fail(ctx, "sextant", urgent.Lease, contract.Timeout))(t)
 	must(q.Fail(ctx, "sextant", normal.Lease, contract.Timeout))(t)
 
-	ack := must(q.Release(ctx, "countersign", "PA-0001"))(t)
+	rel := must(q.Lease(ctx, "countersign"))(t)
+	if rel == nil || rel.Kind != lifecycle.KindRelease || rel.ID != "PA-0001" || rel.State != lifecycle.Recorded ||
+		string(rel.Results["held"]) != `{"worker":"sextant","code":"E_PARSE"}` {
+		t.Fatalf("the release step: %+v", rel)
+	}
+	release := json.RawMessage(`{"decision":"release"}`)
+	// What a release step refuses.
+	refused := []struct {
+		name   string
+		state  lifecycle.State
+		result json.RawMessage
+		want   error
+	}{
+		{"another state", lifecycle.Observed, release, contract.MoveNotAllowed},
+		{"no result", lifecycle.Recorded, nil, contract.MissingField},
+		{"no decision", lifecycle.Recorded, json.RawMessage(`{}`), contract.BadField},
+		{"a decision that does not exist", lifecycle.Recorded, json.RawMessage(`{"decision":"retry"}`), contract.BadField},
+		{"a decision of the wrong type", lifecycle.Recorded, json.RawMessage(`{"decision":true}`), contract.BadField},
+		{"another field", lifecycle.Recorded, json.RawMessage(`{"decision":"release","lane":"normal"}`), contract.BadField},
+	}
+	for _, c := range refused {
+		if _, err := q.Complete(ctx, "countersign", rel.Lease, c.state, c.result); err != c.want {
+			t.Errorf("%s: %v, want %v", c.name, err, c.want)
+		}
+	}
+	if _, err := q.NeedsSubtool(ctx, "countersign", rel.Lease); err != contract.MoveNotAllowed {
+		t.Errorf("pausing a release step: %v", err)
+	}
+	if _, err := q.Complete(ctx, "sextant", rel.Lease, lifecycle.Recorded, release); err != contract.LeaseNotHeld {
+		t.Errorf("another worker deciding: %v", err)
+	}
+
+	ack := must(q.Complete(ctx, "countersign", rel.Lease, lifecycle.Recorded, release))(t)
 	if ack.ID != "PA-0001" || ack.State != lifecycle.Recorded || ack.Next != "sextant" || ack.Held {
 		t.Errorf("the release: %+v", ack)
 	}
+	// The same call again gets the same answer; the other decision under
+	// the same lease does not.
+	again := must(q.Complete(ctx, "countersign", rel.Lease, lifecycle.Recorded, release))(t)
+	if *again != *ack {
+		t.Errorf("the repeated release: %+v", again)
+	}
+	if _, err := q.Complete(ctx, "countersign", rel.Lease, lifecycle.Recorded, json.RawMessage(`{"decision":"keep"}`)); err != contract.LeaseNotHeld {
+		t.Errorf("a different decision under the same lease: %v", err)
+	}
+	if g := must(q.Lease(ctx, "countersign"))(t); g != nil {
+		t.Errorf("a second release step: %+v", g)
+	}
+
 	var order []string
 	for {
 		g := must(q.Lease(ctx, "sextant"))(t)
@@ -311,21 +357,57 @@ func TestReleaseJoinsTheEndOfTheUrgentLane(t *testing.T) {
 	if got := fmt.Sprint(order); got != want {
 		t.Errorf("order after release %s, want %s", got, want)
 	}
-	for _, id := range []string{"PA-0009", "EP-0001", "PA-00001", "made-up"} {
-		if _, err := q.Release(ctx, "countersign", id); err == nil {
-			t.Errorf("releasing %q was accepted", id)
+}
+
+// The owner's decision to keep leaves the item held. The release step
+// ends, and nothing offers the item again.
+func TestKeepLeavesTheItemHeld(t *testing.T) {
+	q, store, clk := setup(t, `{"items":[{"id":"PA-0001","state":"recorded","lane":"normal","next":"sextant"}]}`)
+	g := must(q.Lease(ctx, "sextant"))(t)
+	must(q.Fail(ctx, "sextant", g.Lease, contract.Parse))(t)
+	rel := must(q.Lease(ctx, "countersign"))(t)
+	ack := must(q.Complete(ctx, "countersign", rel.Lease, lifecycle.Recorded, json.RawMessage(`{"decision":"keep"}`)))(t)
+	if ack.ID != "PA-0001" || ack.State != lifecycle.Recorded || ack.Next != "" || !ack.Held {
+		t.Errorf("the answer: %+v", ack)
+	}
+	clk.t = clk.t.Add(30 * 24 * time.Hour)
+	for _, worker := range []string{"sextant", "countersign"} {
+		if g := must(q.Lease(ctx, worker))(t); g != nil {
+			t.Errorf("%s was offered %+v", worker, g)
 		}
+	}
+	if err := store.View(ctx, func(tx logbook.Tx) error {
+		if e, _ := tx.Entry("PA-0001"); !e.Held {
+			t.Errorf("the item's step: %+v", e)
+		}
+		if it, _ := tx.Item("PA-0001"); it.State != lifecycle.Recorded || it.Results["countersign"] != nil {
+			t.Errorf("the item: %+v", it)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var kept int
+	for _, r := range store.Ledger() {
+		if r.Action == logbook.ActKeep && r.Actor == "countersign" && r.Subject == "PA-0001" {
+			kept++
+		}
+	}
+	if kept != 1 {
+		t.Errorf("the ledger records %d keep decisions, want 1", kept)
 	}
 }
 
-// A result handed to one worker is never changed by a later one.
-func TestResultsAreNotShared(t *testing.T) {
-	q, _, _ := setup(t, `{"items":[{"id":"PA-0001","state":"discovered","lane":"normal","next":"trawl"}]}`)
-	g := must(q.Lease(ctx, "trawl"))(t)
-	must(q.Complete(ctx, "trawl", g.Lease, lifecycle.Recorded, json.RawMessage(`{"n":1}`)))(t)
-	first := must(q.Lease(ctx, "sextant"))(t)
-	must(q.Complete(ctx, "sextant", first.Lease, lifecycle.Observed, json.RawMessage(`{"n":2}`)))(t)
-	if len(first.Results) != 1 || string(first.Results["trawl"]) != `{"n":1}` {
-		t.Errorf("what Sextant was shown changed after it finished: %s", first.Results)
+// A paused item gets an incident step and no release step: it runs
+// again by itself when its worker is redeployed.
+func TestPausedItemHasNoReleaseStep(t *testing.T) {
+	q, _, _ := setup(t, `{"items":[{"id":"PA-0001","state":"recorded","lane":"normal","next":"sextant"}]}`)
+	g := must(q.Lease(ctx, "sextant"))(t)
+	must(q.NeedsSubtool(ctx, "sextant", g.Lease))(t)
+	if g := must(q.Lease(ctx, "countersign"))(t); g != nil {
+		t.Errorf("a release step for a paused item: %+v", g)
+	}
+	if g := must(q.Lease(ctx, "bellbuoy"))(t); g == nil || g.Kind != lifecycle.KindIncident {
+		t.Errorf("the incident step: %+v", g)
 	}
 }

@@ -22,6 +22,9 @@ const (
 	// KindIncident is a step that tells Bellbuoy an item was stopped or
 	// paused. It is about an item and changes no state.
 	KindIncident Kind = "incident"
+	// KindRelease is a step that asks Countersign for the owner's
+	// decision on an item that was stopped: release it, or keep it held.
+	KindRelease Kind = "release"
 )
 
 // The fourteen item states.

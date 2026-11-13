@@ -5,7 +5,6 @@
 //	POST /v1/complete        a worker reports a finished step
 //	POST /v1/fail            a worker reports E_TIMEOUT or E_PARSE
 //	POST /v1/needs_subtool   a worker pauses an item it has no rule for
-//	POST /v1/release         Countersign passes on the owner's release of a stopped item
 //	POST /v1/items           Trawl or Conn records a candidate
 //	POST /v1/health          Shipkeeper reports component health
 //	POST /v1/edits           Conn forwards an edit proposal
@@ -92,7 +91,6 @@ var calls = map[string]call{
 	"/v1/complete":      {method: http.MethodPost, may: registry.IsWorker, do: (*Server).complete},
 	"/v1/fail":          {method: http.MethodPost, may: registry.IsWorker, do: (*Server).fail},
 	"/v1/needs_subtool": {method: http.MethodPost, may: registry.IsWorker, do: (*Server).needsSubtool},
-	"/v1/release":       {method: http.MethodPost, may: only("countersign"), do: (*Server).release},
 	"/v1/items":         {method: http.MethodPost, may: only("trawl", registry.Conn), do: (*Server).items},
 	"/v1/health":        {method: http.MethodPost, may: only(registry.Shipkeeper), do: (*Server).health},
 	"/v1/edits":         {method: http.MethodPost, may: only(registry.Conn), do: (*Server).edits},
@@ -285,31 +283,6 @@ func (s *Server) needsSubtool(w http.ResponseWriter, r *http.Request, caller str
 	ctx, cancel := s.within(r)
 	defer cancel()
 	ack, err := s.Queue.NeedsSubtool(ctx, caller, req.Lease)
-	if err != nil {
-		refuse(w, problemOf(err))
-		return
-	}
-	answer(w, http.StatusOK, ack)
-}
-
-type releaseRequest struct {
-	Contract string `json:"contract"`
-	ID       string `json:"id"`
-}
-
-func (s *Server) release(w http.ResponseWriter, r *http.Request, caller string) {
-	var req releaseRequest
-	if p := read(w, r, MaxBody, &req, &req.Contract); p != nil {
-		refuse(w, p)
-		return
-	}
-	if req.ID == "" {
-		refuse(w, contract.MissingField)
-		return
-	}
-	ctx, cancel := s.within(r)
-	defer cancel()
-	ack, err := s.Queue.Release(ctx, caller, req.ID)
 	if err != nil {
 		refuse(w, problemOf(err))
 		return

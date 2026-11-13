@@ -57,13 +57,13 @@ Everything below is built, and each rule has saved examples that fail if the beh
 - **The five worker calls.** A worker leases its next step, keeps the lease with heartbeats, and ends it with complete, fail or needs_subtool. Work is offered urgent first, then normal, then backfill, and in order of arrival within a lane.
 - **The fourteen item states.** Only the moves in the contract's table are allowed, and each worker can make only its own. A refused move changes nothing.
 - **State and queue together.** A change of state and the next queue step are written in one transaction, or neither is.
-- **Results passed on.** Each worker's result reaches every later worker under that worker's name.
+- **Results passed on.** Each worker's result reaches every later worker under that worker's name, for items and proposals alike.
 - **Leases that expire.** A step whose lease runs out is offered again. A finished result that arrives late is still kept if nobody else has taken the step.
 - **Repeats.** A worker that repeats a call it was never told had succeeded gets the same answer, and nothing happens twice.
 - **Recording candidates.** Trawl or Conn records a find as an item, once. An address already on record changes nothing and the answer names the item that has it.
 - **Pause and replay.** An item with no rule is paused. When Shipkeeper reports a new image digest for the worker that paused it, the item runs again in the urgent lane.
 - **Incidents.** An item that is stopped or paused gets one step for Bellbuoy saying which worker, which code and which state.
-- **Release.** The owner's decision, passed on by Countersign, returns a stopped item to the urgent lane in the state it was stopped in.
+- **Release.** An item stopped by `E_PARSE` is leased to Countersign as a release step. The owner's decision either returns it to the urgent lane in the state it was stopped in, or keeps it held.
 - **Checks on live items.** Every live item comes to Tidegauge every seven days, in the backfill lane. A check can leave it live or retire it.
 - **Health reports.** A report is a closed form with no free-text field, so it cannot carry a node name or an address.
 - **The live feed.** Queue depths, component health and edit status changes, as Server-Sent Events, in one batch every five seconds.

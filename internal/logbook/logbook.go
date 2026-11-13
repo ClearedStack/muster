@@ -58,7 +58,8 @@ type Tx interface {
 
 	// Entry returns the queue entry with this key. An item or a proposal
 	// has at most one step of its own, keyed by its identifier. An item
-	// may also have one incident step, keyed by IncidentKey.
+	// may also have one incident step, keyed by IncidentKey, and one
+	// release step, keyed by ReleaseKey.
 	Entry(key string) (Entry, bool)
 	PutEntry(Entry)
 	DeleteEntry(key string)
@@ -119,9 +120,11 @@ type Item struct {
 	Results map[string]json.RawMessage
 
 	// Done remembers how the last lease on the item's own step ended,
-	// and IncidentDone how the last lease on its incident step ended.
+	// IncidentDone how the last lease on its incident step ended, and
+	// ReleaseDone how the last lease on its release step ended.
 	Done         Finished
 	IncidentDone Finished
+	ReleaseDone  Finished
 }
 
 // Proposal is one edit proposal. It never holds the address it came from,
@@ -136,6 +139,10 @@ type Proposal struct {
 	Reason     string
 	Status     lifecycle.State
 	Received   time.Time
+
+	// Results holds the latest result each worker submitted for the
+	// proposal, by worker. A stored map is never changed in place.
+	Results map[string]json.RawMessage
 
 	Done Finished
 }
@@ -162,8 +169,8 @@ type Entry struct {
 	// never offered.
 	Held bool
 
-	// Incident is what an incident step reports. It is empty for any
-	// other kind of step.
+	// Incident is what an incident step or a release step reports. It
+	// is empty for any other kind of step.
 	Incident Incident
 }
 
@@ -177,6 +184,9 @@ type Incident struct {
 
 // IncidentKey is the queue key of the incident step of an item.
 func IncidentKey(itemID string) string { return "incident:" + itemID }
+
+// ReleaseKey is the queue key of the release step of an item.
+func ReleaseKey(itemID string) string { return "release:" + itemID }
 
 // Finished remembers how the last lease on a subject ended, so that a
 // worker repeating a call it was never told had succeeded gets the same
@@ -240,5 +250,6 @@ const (
 	ActSighting = "sighting"
 	ActIncident = "incident"
 	ActRelease  = "release"
+	ActKeep     = "keep"
 	ActLive     = "live"
 )

@@ -103,7 +103,7 @@
       }
     },
     {
-      "note": "a decision carries no result, and there is nowhere to keep one",
+      "note": "approved, with a result: Bellbuoy is next, in the urgent lane",
       "as": "countersign",
       "method": "POST",
       "path": "/v1/complete",
@@ -112,25 +112,8 @@
         "lease": "EP-0001.1",
         "state": "approved",
         "result": {
-          "note": "made-up"
+          "note": "made-up note from the owner"
         }
-      },
-      "status": 400,
-      "want": {
-        "error": "E_PARSE",
-        "cause": "bad_field",
-        "reason": "a field does not have the form this call requires"
-      }
-    },
-    {
-      "note": "approved: Bellbuoy is next, in the urgent lane",
-      "as": "countersign",
-      "method": "POST",
-      "path": "/v1/complete",
-      "send": {
-        "contract": "v1",
-        "lease": "EP-0001.1",
-        "state": "approved"
       },
       "status": 200,
       "want": {
@@ -224,6 +207,7 @@
       }
     },
     {
+      "note": "with what Countersign gave, under results.countersign",
       "as": "bellbuoy",
       "method": "POST",
       "path": "/v1/lease",
@@ -239,6 +223,11 @@
         "lane": "urgent",
         "attempt": 1,
         "expires": "2026-01-05T09:01:00Z",
+        "results": {
+          "countersign": {
+            "note": "made-up note from the owner"
+          }
+        },
         "proposal": {
           "target": "catalog/sample-calculator/description",
           "repository": "clearedstack.com",
