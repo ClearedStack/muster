@@ -24,14 +24,15 @@ func entry(subject, worker string, lane lifecycle.Lane, arrival uint64) logbook.
 func TestFailedTransactionChangesNothing(t *testing.T) {
 	s := New()
 	must(t, s.Update(ctx, func(tx logbook.Tx) error {
+		tx.AddItem(logbook.Item{State: lifecycle.Discovered, Address: "https://example.org/made-up/1"})
+		tx.AddProposal(logbook.Proposal{Status: lifecycle.PendingApproval})
 		tx.PutItem(logbook.Item{ID: "PA-0001", State: lifecycle.Recorded, Lane: lifecycle.Normal})
-		tx.PutEntry(entry("PA-0001", "sextant", lifecycle.Normal, tx.Next(logbook.CounterArrival)))
-		tx.PutEntry(entry("PA-0002", "sextant", lifecycle.Normal, tx.Next(logbook.CounterArrival)))
+		tx.PutEntry(entry("PA-0001", "sextant", lifecycle.Normal, 0))
+		tx.PutEntry(entry("PA-0002", "sextant", lifecycle.Normal, 0))
 		tx.PutProposal(logbook.Proposal{ID: "EP-0001", Status: lifecycle.PendingApproval})
 		tx.PutComponent(logbook.Component{Slug: "sextant", State: "healthy"})
-		tx.PutItemAt("made-up-address-key", "PA-0001")
 		tx.Bump("2026-01-05", "made-up-key")
-		tx.Append(logbook.Record{Seq: 1, Action: logbook.ActLease})
+		tx.Append(logbook.Record{Action: logbook.ActLease})
 		return nil
 	}))
 
@@ -39,17 +40,17 @@ func TestFailedTransactionChangesNothing(t *testing.T) {
 	err := s.Update(ctx, func(tx logbook.Tx) error {
 		tx.PutItem(logbook.Item{ID: "PA-0001", State: lifecycle.Observed, Lane: lifecycle.Urgent})
 		tx.PutItem(logbook.Item{ID: "PA-0009", State: lifecycle.Recorded})
-		tx.PutEntry(entry("PA-0001", "assay", lifecycle.Urgent, tx.Next(logbook.CounterArrival)))
+		tx.PutEntry(entry("PA-0001", "assay", lifecycle.Urgent, 0))
 		tx.DeleteEntry("PA-0002")
 		tx.PutProposal(logbook.Proposal{ID: "EP-0001", Status: lifecycle.Approved})
 		tx.PutProposal(logbook.Proposal{ID: "EP-0002", Status: lifecycle.PendingApproval})
 		tx.PutComponent(logbook.Component{Slug: "sextant", State: "degraded"})
 		tx.PutComponent(logbook.Component{Slug: "assay", State: "healthy"})
-		tx.PutItemAt("made-up-address-key", "PA-0009")
-		tx.PutItemAt("another-made-up-address-key", "PA-0009")
+		tx.AddItem(logbook.Item{State: lifecycle.Discovered, Address: "https://example.org/made-up/2"})
+		tx.AddProposal(logbook.Proposal{Status: lifecycle.PendingApproval})
 		tx.Bump("2026-01-05", "made-up-key")
 		tx.Bump("2026-01-06", "another-made-up-key") // a new day clears the old counts
-		tx.Append(logbook.Record{Seq: 2, Action: logbook.ActComplete})
+		tx.Append(logbook.Record{Action: logbook.ActComplete})
 		return boom
 	})
 	if err != boom {
@@ -81,14 +82,23 @@ func TestFailedTransactionChangesNothing(t *testing.T) {
 		if len(tx.Components()) != 1 {
 			t.Error("a new component was kept")
 		}
-		if id, _ := tx.ItemAt("made-up-address-key"); id != "PA-0001" {
-			t.Errorf("an address now belongs to %q", id)
+		// The address, the identifiers and the place in the queue that
+		// the failed transaction took are all free again.
+		if id, existing := tx.AddItem(logbook.Item{State: lifecycle.Discovered, Address: "https://example.org/made-up/1"}); id != "PA-0001" || !existing {
+			t.Errorf("the first address: %q, %v", id, existing)
 		}
-		if _, ok := tx.ItemAt("another-made-up-address-key"); ok {
-			t.Error("a new address was kept")
+		if id, existing := tx.AddItem(logbook.Item{State: lifecycle.Discovered, Address: "https://example.org/made-up/2"}); id != "PA-0002" || existing {
+			t.Errorf("the address the failed transaction recorded: %q, %v", id, existing)
 		}
-		if n := tx.Next(logbook.CounterArrival); n != 3 {
-			t.Errorf("the arrival counter moved: next is %d, want 3", n)
+		if id := tx.AddProposal(logbook.Proposal{Status: lifecycle.PendingApproval}); id != "EP-0002" {
+			t.Errorf("the next proposal would be %q, want EP-0002", id)
+		}
+		if seq := tx.Append(logbook.Record{Action: logbook.ActLease}); seq != 2 {
+			t.Errorf("the next ledger number would be %d, want 2", seq)
+		}
+		tx.PutEntry(entry("PA-0003", "sextant", lifecycle.Normal, 0))
+		if e, _ := tx.Entry("PA-0003"); e.Arrival != 3 {
+			t.Errorf("the next arrival would be %d, want 3", e.Arrival)
 		}
 		if n, _ := tx.Bump("2026-01-05", "made-up-key"); n != 2 {
 			t.Errorf("the day's count changed: next is %d, want 2", n)
@@ -104,14 +114,14 @@ func TestViewKeepsNothing(t *testing.T) {
 	s := New()
 	must(t, s.View(ctx, func(tx logbook.Tx) error {
 		tx.PutItem(logbook.Item{ID: "PA-0001"})
-		tx.Next(logbook.CounterLease)
+		tx.AddProposal(logbook.Proposal{})
 		return nil
 	}))
 	must(t, s.View(ctx, func(tx logbook.Tx) error {
 		if _, ok := tx.Item("PA-0001"); ok {
 			t.Error("a view kept an item")
 		}
-		if tx.Next(logbook.CounterLease) != 1 {
+		if tx.AddProposal(logbook.Proposal{}) != "EP-0001" {
 			t.Error("a view moved a counter")
 		}
 		return nil
@@ -284,7 +294,9 @@ func TestLedgerIsBounded(t *testing.T) {
 	const total = 5*LedgerKept + 7
 	for i := 1; i <= total; i++ {
 		must(t, s.Update(ctx, func(tx logbook.Tx) error {
-			tx.Append(logbook.Record{Seq: uint64(i)})
+			if seq := tx.Append(logbook.Record{}); seq != uint64(i) {
+				t.Fatalf("ledger number %d, want %d", seq, i)
+			}
 			return nil
 		}))
 	}
@@ -363,8 +375,8 @@ func TestSeedLiveItemsAndNumbering(t *testing.T) {
 		if _, ok := tx.Entry("PA-0007"); ok {
 			t.Error("a rejected item was given a step")
 		}
-		if n := tx.Next(logbook.CounterItem); n != 10001 {
-			t.Errorf("the next item would be numbered %d, want 10001", n)
+		if id, _ := tx.AddItem(logbook.Item{State: lifecycle.Discovered}); id != "PA-10001" {
+			t.Errorf("the next item would be %s, want PA-10001", id)
 		}
 		return nil
 	}))

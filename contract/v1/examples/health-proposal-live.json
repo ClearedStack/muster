@@ -8,10 +8,10 @@
         "path": "/v1/edits",
         "body": {
           "contract": "v1",
-          "target": "catalog/sample-calculator/description",
+          "target": "catalog.sample-calculator.description",
           "change": "The sample description should say which made-up rule it follows.",
           "reason": "It reads as if no rule applies.",
-          "pow": "2026-01-05.13ee87",
+          "pow": "2026-01-05.208bd",
           "honeypot": "",
           "source": "203.0.113.7"
         }
@@ -30,7 +30,7 @@
         "path": "/v1/complete",
         "body": {
           "contract": "v1",
-          "lease": "EP-0001.1",
+          "lease": "EP-0001.1.1",
           "state": "approved"
         }
       },
@@ -48,7 +48,7 @@
         "path": "/v1/complete",
         "body": {
           "contract": "v1",
-          "lease": "EP-0001.2",
+          "lease": "EP-0001.2.1",
           "state": "building"
         }
       },

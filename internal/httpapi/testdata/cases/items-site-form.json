@@ -148,10 +148,10 @@
       "path": "/v1/edits",
       "send": {
         "contract": "v1",
-        "target": "catalog/sample-calculator/description",
+        "target": "catalog.sample-calculator.description",
         "change": "Made-up change 1.",
         "reason": "It reads as if no rule applies.",
-        "pow": "2026-01-05.af6db",
+        "pow": "2026-01-05.2afe",
         "honeypot": "",
         "source": "203.0.113.7"
       },
@@ -167,10 +167,10 @@
       "path": "/v1/edits",
       "send": {
         "contract": "v1",
-        "target": "catalog/sample-calculator/description",
+        "target": "catalog.sample-calculator.description",
         "change": "Made-up change 2.",
         "reason": "It reads as if no rule applies.",
-        "pow": "2026-01-05.124949",
+        "pow": "2026-01-05.4db1a",
         "honeypot": "",
         "source": "203.0.113.7"
       },
@@ -247,10 +247,10 @@
       "path": "/v1/edits",
       "send": {
         "contract": "v1",
-        "target": "catalog/sample-calculator/description",
+        "target": "catalog.sample-calculator.description",
         "change": "Made-up change 3.",
         "reason": "It reads as if no rule applies.",
-        "pow": "2026-01-05.1a687b",
+        "pow": "2026-01-05.2f426",
         "honeypot": "",
         "source": "203.0.113.7"
       },

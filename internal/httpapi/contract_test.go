@@ -140,16 +140,20 @@ func TestContractExamples(t *testing.T) {
 				seed = &memory.Seed{Items: ex.Given.Items}
 			}
 			s := newStack(t, seed)
+			var granted []string
 			if g := ex.Given; g != nil {
 				for i := range g.Calls {
 					st := g.Calls[i].step()
 					if *update {
 						solve(t, &st, s.clock.Now())
+						st.Send = realLeases(st.Send, granted)
 						g.Calls[i].Body = st.Send
 					}
-					if rec := s.do(t, st); rec.Code < 200 || rec.Code > 299 {
+					rec := s.do(t, st)
+					if rec.Code < 200 || rec.Code > 299 {
 						t.Fatalf("given call %d (%s) did not succeed: %d %s", i+1, st.Path, rec.Code, rec.Body)
 					}
+					granted = noteLease(granted, st.Path, rec)
 				}
 				if g.Wait != "" {
 					d, err := time.ParseDuration(g.Wait)
@@ -163,6 +167,7 @@ func TestContractExamples(t *testing.T) {
 			st := ex.Request.step()
 			if *update {
 				solve(t, &st, s.clock.Now())
+				st.Send = realLeases(st.Send, granted)
 				ex.Request.Body = st.Send
 			}
 			seenPath[ex.Request.Path] = true

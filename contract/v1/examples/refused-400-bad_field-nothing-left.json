@@ -6,10 +6,10 @@
     "path": "/v1/edits",
     "body": {
       "contract": "v1",
-      "target": "catalog/sample-calculator/description",
+      "target": "catalog.sample-calculator.description",
       "change": "<script>made_up()</script><p></p>",
       "reason": "It reads as if no rule applies.",
-      "pow": "2026-01-05.fb30a",
+      "pow": "2026-01-05.c0c41",
       "honeypot": "",
       "source": "203.0.113.7"
     }

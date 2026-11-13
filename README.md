@@ -63,8 +63,8 @@ Everything below is built, and each rule has saved examples that fail if the beh
 - **Recording candidates.** Trawl or Conn records a find as an item, once. An address already on record changes nothing and the answer names the item that has it.
 - **Pause and replay.** An item with no rule is paused. When Shipkeeper reports a new image digest for the worker that paused it, the item runs again in the urgent lane.
 - **Incidents.** An item that is stopped or paused gets one step for Bellbuoy saying which worker, which code and which state.
-- **Release.** An item stopped by `E_PARSE` is leased to Countersign as a release step. The owner's decision either returns it to the urgent lane in the state it was stopped in, or keeps it held.
-- **Checks on live items.** Every live item comes to Tidegauge every seven days, in the backfill lane. A check can leave it live or retire it.
+- **Release.** The owner's decision, passed on by Countersign, returns a stopped item to the urgent lane in the state it was stopped in.
+- **Checks on live items.** Every live item comes to Tidegauge every seven days, in the backfill lane. A check can leave it live, send it back to be rebuilt, or retire it.
 - **Health reports.** A report is a closed form with no free-text field, so it cannot carry a node name or an address.
 - **The live feed.** Queue depths, component health and edit status changes, as Server-Sent Events, in one batch every five seconds.
 - **Edit intake, checks 1 to 4.** Proof of work, honeypot, a daily-salted rate limit that never stores an address, and the shape and size check with markup stripped. What passes is kept as `pending_approval` and queued for Countersign. Check 5, the owner's approval, happens there. An approved proposal goes live when Shipkeeper reports a new digest for its repository.
@@ -75,7 +75,7 @@ Everything below is built, and each rule has saved examples that fail if the beh
 ## Not yet done
 
 - **A real Logbook.** Muster talks to Logbook through a small interface ([`internal/logbook`](internal/logbook/logbook.go)). The only thing behind it today is a stand-in that keeps everything in memory and loses it when the process stops. The SQL adapter, and with it the append-only ledger kept in full, are not built, because Logbook's tables do not exist yet. The stand-in keeps only the most recent 2,048 ledger lines.
-- **Four of Tidegauge's moves.** `live` to `building`, and `parked`, `linked` or `merged` back to `observed`, are in the state table and have no next worker defined, so they are refused.
+- **Three of Tidegauge's moves.** `parked`, `linked` or `merged` back to `observed` are in the state table and have no next worker defined, so they are refused.
 - **The identity check against a real cluster.** It is tested against saved answers from a stand-in for the Kubernetes API, not against a cluster.
 - **Three duties named on other pages and not in `SPEC.md` or the contract:** rejecting raw Sextant pages bound for Moldloft, requiring a written reason for an override, and routing the owner's install, upgrade, pause and rollback actions.
 - **Kubernetes manifests.** None is included. The form Shipkeeper expects is not specified.
@@ -107,12 +107,12 @@ curl -s -X POST localhost:8080/v1/lease \
   -H 'Authorization: Bearer made-up-token-for-sextant' \
   -H 'Content-Type: application/json' \
   -d '{"contract":"v1"}'
-# {"lease":"PA-0003.1","kind":"item","id":"PA-0003","state":"recorded","lane":"urgent",...}
+# {"lease":"PA-0003.3.1","kind":"item","id":"PA-0003","state":"recorded","lane":"urgent",...}
 
 curl -s -X POST localhost:8080/v1/complete \
   -H 'Authorization: Bearer made-up-token-for-sextant' \
   -H 'Content-Type: application/json' \
-  -d '{"contract":"v1","lease":"PA-0003.1","state":"observed","result":{"job":"made-up job"}}'
+  -d '{"contract":"v1","lease":"PA-0003.3.1","state":"observed","result":{"job":"made-up job"}}'
 # {"id":"PA-0003","state":"observed","next":"assay"}
 ```
 
@@ -168,7 +168,7 @@ The saved examples are the record of how Muster behaves:
 | Where | What is saved |
 | --- | --- |
 | [`contract/v1/examples/`](contract/v1/examples) | One file for each call and each refusal in the contract: the request, without the token, and the exact status and body expected. The test fails if a call or a refusal has no example. |
-| [`internal/httpapi/testdata/cases/`](internal/httpapi/testdata/cases) | 29 short stories, one per rule. Each is a list of calls in order with the exact status and body expected back. Start here to see how the calls work together. |
+| [`internal/httpapi/testdata/cases/`](internal/httpapi/testdata/cases) | 30 short stories, one per rule. Each is a list of calls in order with the exact status and body expected back. Start here to see how the calls work together. |
 | [`internal/lifecycle/testdata/tables.json`](internal/lifecycle/testdata/tables.json) | Every state, move, lane and queue step. A second test checks these against the tables in the contract. |
 | [`internal/contract/testdata/refusals.json`](internal/contract/testdata/refusals.json) | Every refusal Muster can give. |
 | [`internal/intake/testdata/`](internal/intake/testdata) | Markup stripping, proof-of-work tokens and address hashes. The tokens and hashes were computed outside Muster's own code. |

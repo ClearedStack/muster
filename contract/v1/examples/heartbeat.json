@@ -27,13 +27,13 @@
     "path": "/v1/heartbeat",
     "body": {
       "contract": "v1",
-      "lease": "PA-0001.1"
+      "lease": "PA-0001.1.1"
     }
   },
   "expect": {
     "status": 200,
     "body": {
-      "lease": "PA-0001.1",
+      "lease": "PA-0001.1.1",
       "expires": "2026-01-05T09:01:45Z"
     }
   }

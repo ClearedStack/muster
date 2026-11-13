@@ -126,14 +126,7 @@ func (s *Service) Receive(ctx context.Context, sub Submission, size int) (*Recei
 			return nil
 		}
 		// Layer 5.
-		n := tx.Next(logbook.CounterProposal)
-		if n > lifecycle.MaxID {
-			refusal = contract.Unexpected
-			return nil
-		}
-		id := lifecycle.ProposalID(n)
-		tx.PutProposal(logbook.Proposal{
-			ID:         id,
+		id := tx.AddProposal(logbook.Proposal{
 			Target:     sub.Target,
 			Repository: owner.Repository,
 			File:       owner.File,
@@ -143,13 +136,16 @@ func (s *Service) Receive(ctx context.Context, sub Submission, size int) (*Recei
 			Status:     lifecycle.PendingApproval,
 			Received:   now.UTC(),
 		})
+		if id == "" {
+			refusal = contract.Unexpected
+			return nil
+		}
 		tx.PutEntry(logbook.Entry{
 			Key:     id,
 			Subject: id,
 			Kind:    lifecycle.KindProposal,
 			Worker:  "countersign",
 			Lane:    lifecycle.Normal,
-			Arrival: tx.Next(logbook.CounterArrival),
 		})
 		queue.Record(tx, now, registry.Conn, logbook.ActPropose, id, "", lifecycle.PendingApproval, "")
 		receipt = &Receipt{ID: id, Status: lifecycle.PendingApproval}

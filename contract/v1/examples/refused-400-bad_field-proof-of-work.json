@@ -6,7 +6,7 @@
     "path": "/v1/edits",
     "body": {
       "contract": "v1",
-      "target": "catalog/sample-calculator/description",
+      "target": "catalog.sample-calculator.description",
       "change": "The sample description should say which made-up rule it follows.",
       "reason": "It reads as if no rule applies.",
       "pow": "2026-01-05.0",

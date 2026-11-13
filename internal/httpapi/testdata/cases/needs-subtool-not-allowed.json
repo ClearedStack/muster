@@ -32,7 +32,7 @@
       },
       "status": 200,
       "want": {
-        "lease": "PA-0001.1",
+        "lease": "PA-0001.1.1",
         "kind": "item",
         "id": "PA-0001",
         "state": "discovered",
@@ -48,7 +48,7 @@
       "path": "/v1/needs_subtool",
       "send": {
         "contract": "v1",
-        "lease": "PA-0001.1"
+        "lease": "PA-0001.1.1"
       },
       "status": 409,
       "want": {
@@ -66,7 +66,7 @@
       },
       "status": 200,
       "want": {
-        "lease": "PA-0002.2",
+        "lease": "PA-0002.2.1",
         "kind": "item",
         "id": "PA-0002",
         "state": "scored",
@@ -82,7 +82,7 @@
       "path": "/v1/needs_subtool",
       "send": {
         "contract": "v1",
-        "lease": "PA-0002.2"
+        "lease": "PA-0002.2.1"
       },
       "status": 409,
       "want": {
@@ -100,7 +100,7 @@
       },
       "status": 200,
       "want": {
-        "lease": "PA-0003.3",
+        "lease": "PA-0003.3.1",
         "kind": "item",
         "id": "PA-0003",
         "state": "approved",
@@ -116,7 +116,7 @@
       "path": "/v1/needs_subtool",
       "send": {
         "contract": "v1",
-        "lease": "PA-0003.3"
+        "lease": "PA-0003.3.1"
       },
       "status": 200,
       "want": {
@@ -131,7 +131,7 @@
       "path": "/v1/needs_subtool",
       "send": {
         "contract": "v1",
-        "lease": "PA-0004.1"
+        "lease": "PA-0004.999.1"
       },
       "status": 409,
       "want": {

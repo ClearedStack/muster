@@ -1,5 +1,5 @@
 {
-  "about": "What a candidate must be: a known source, a title of one line and at most 200 characters, an address of at most 2,000 characters with no white space.",
+  "about": "What a candidate must be: a known source, a title of one line and at most 200 bytes, an address of at most 2,000 bytes with no white space.",
   "steps": [
     {
       "note": "no source",
@@ -89,14 +89,14 @@
       }
     },
     {
-      "note": "a title of 200 characters",
+      "note": "a title of 200 bytes",
       "as": "trawl",
       "method": "POST",
       "path": "/v1/items",
       "send": {
         "contract": "v1",
         "source": "sam-gov",
-        "title": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
+        "title": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
         "address": "https://example.org/made-up/200"
       },
       "status": 201,
@@ -107,15 +107,15 @@
       }
     },
     {
-      "note": "a title of 201 characters",
+      "note": "a title of 202 bytes",
       "as": "trawl",
       "method": "POST",
       "path": "/v1/items",
       "send": {
         "contract": "v1",
         "source": "sam-gov",
-        "title": "ééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
-        "address": "https://example.org/made-up/201"
+        "title": "ééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
+        "address": "https://example.org/made-up/202"
       },
       "status": 400,
       "want": {
@@ -161,7 +161,7 @@
       }
     },
     {
-      "note": "an address of 2,000 characters",
+      "note": "an address of 2,000 bytes",
       "as": "trawl",
       "method": "POST",
       "path": "/v1/items",
@@ -179,7 +179,7 @@
       }
     },
     {
-      "note": "an address of 2,001 characters",
+      "note": "an address of 2,001 bytes",
       "as": "trawl",
       "method": "POST",
       "path": "/v1/items",
@@ -302,7 +302,7 @@
       },
       "status": 200,
       "want": {
-        "lease": "PA-0001.1",
+        "lease": "PA-0001.1.1",
         "kind": "item",
         "id": "PA-0001",
         "state": "discovered",
@@ -311,7 +311,7 @@
         "expires": "2026-01-05T09:01:00Z",
         "found": {
           "source": "sam-gov",
-          "title": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
+          "title": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
           "address": "https://example.org/made-up/200"
         }
       }
@@ -325,7 +325,7 @@
       },
       "status": 200,
       "want": {
-        "lease": "PA-0002.2",
+        "lease": "PA-0002.2.1",
         "kind": "item",
         "id": "PA-0002",
         "state": "discovered",

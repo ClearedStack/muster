@@ -26,7 +26,7 @@
     "path": "/v1/heartbeat",
     "body": {
       "contract": "v1",
-      "lease": "PA-0001.9"
+      "lease": "PA-0001.999.1"
     }
   },
   "expect": {

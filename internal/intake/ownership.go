@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 
 	"github.com/ClearedStack/muster/internal/registry"
 )
@@ -24,8 +25,13 @@ type Ownership map[string]Owner
 // Limits on the ownership map and on a target name.
 const (
 	MaxOwnershipBytes = 1 << 20
-	MaxTargetBytes    = 256
+	MaxTargetBytes    = 100
 )
+
+// A target is a name of the form Logbook keeps for an element: lower
+// case words joined by full stops, hyphens or underscores, such as
+// catalog.sample-tool.description.
+var targetForm = regexp.MustCompile(`^[a-z][a-z0-9]*([._-][a-z0-9]+)*$`)
 
 var editKinds = map[string]bool{"DATA": true, "CONFIG": true, "ISSUE": true}
 
@@ -51,8 +57,8 @@ func ParseOwnership(data []byte) (Ownership, error) {
 		return nil, errors.New("the ownership map has no elements")
 	}
 	for target, o := range file.Elements {
-		if target == "" || len(target) > MaxTargetBytes || !plain(target) {
-			return nil, errors.New("the ownership map has a target name that is empty, too long or not plain text")
+		if len(target) > MaxTargetBytes || !targetForm.MatchString(target) {
+			return nil, errors.New("the ownership map has a target name that is too long or not a well-formed name")
 		}
 		if !registry.IsRepository(o.Repository) {
 			return nil, fmt.Errorf("ownership map, target %q: the repository is not in the registry", target)

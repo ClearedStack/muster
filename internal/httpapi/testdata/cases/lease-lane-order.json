@@ -39,7 +39,7 @@
       },
       "status": 200,
       "want": {
-        "lease": "PA-0003.1",
+        "lease": "PA-0003.3.1",
         "kind": "item",
         "id": "PA-0003",
         "state": "recorded",
@@ -58,7 +58,7 @@
       },
       "status": 200,
       "want": {
-        "lease": "PA-0002.2",
+        "lease": "PA-0002.2.1",
         "kind": "item",
         "id": "PA-0002",
         "state": "recorded",
@@ -76,7 +76,7 @@
       },
       "status": 200,
       "want": {
-        "lease": "PA-0004.3",
+        "lease": "PA-0004.4.1",
         "kind": "item",
         "id": "PA-0004",
         "state": "recorded",
@@ -95,7 +95,7 @@
       },
       "status": 200,
       "want": {
-        "lease": "PA-0001.4",
+        "lease": "PA-0001.1.1",
         "kind": "item",
         "id": "PA-0001",
         "state": "recorded",

@@ -10,6 +10,9 @@ package memory
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"sort"
 	"sync"
 	"time"
@@ -135,15 +138,42 @@ func (t *txn) PutProposal(v logbook.Proposal) {
 	t.s.proposals[v.ID] = v
 }
 
-func (t *txn) ItemAt(key string) (string, bool) {
-	id, ok := t.s.addresses[key]
-	return id, ok
+// AddressKey is what the stand-in knows an address by: the SHA-256 of
+// its bytes, as Logbook does.
+func AddressKey(address string) string {
+	sum := sha256.Sum256([]byte(address))
+	return hex.EncodeToString(sum[:])
 }
 
-func (t *txn) PutItemAt(key, id string) {
-	old, had := t.s.addresses[key]
-	t.undo = append(t.undo, func() { restore(t.s.addresses, key, old, had) })
-	t.s.addresses[key] = id
+func (t *txn) AddItem(v logbook.Item) (string, bool) {
+	key := ""
+	if v.Address != "" {
+		key = AddressKey(v.Address)
+		if id, seen := t.s.addresses[key]; seen {
+			return id, true
+		}
+	}
+	n := t.next(counterItem)
+	if n > lifecycle.MaxID {
+		return "", false
+	}
+	v.ID = lifecycle.ItemID(n)
+	t.PutItem(v)
+	if key != "" {
+		t.undo = append(t.undo, func() { delete(t.s.addresses, key) })
+		t.s.addresses[key] = v.ID
+	}
+	return v.ID, false
+}
+
+func (t *txn) AddProposal(v logbook.Proposal) string {
+	n := t.next(counterProposal)
+	if n > lifecycle.MaxID {
+		return ""
+	}
+	v.ID = lifecycle.ProposalID(n)
+	t.PutProposal(v)
+	return v.ID
 }
 
 func (t *txn) Building(repository string) []logbook.Proposal {
@@ -170,6 +200,9 @@ func (t *txn) Entry(key string) (logbook.Entry, bool) {
 }
 
 func (t *txn) PutEntry(v logbook.Entry) {
+	if v.Arrival == 0 {
+		v.Arrival = t.next(counterArrival)
+	}
 	old, had := t.s.entries[v.Key]
 	t.undo = append(t.undo, func() { restore(t.s.entries, v.Key, old, had) })
 	t.s.entries[v.Key] = v
@@ -253,7 +286,15 @@ func (t *txn) Depths(now time.Time) logbook.Depths {
 	return d
 }
 
-func (t *txn) Next(counter string) uint64 {
+// The stand-in's own counters. Logbook has a sequence for each.
+const (
+	counterArrival  = "arrival"
+	counterItem     = "item"
+	counterProposal = "proposal"
+	counterLedger   = "ledger"
+)
+
+func (t *txn) next(counter string) uint64 {
 	old := t.s.counters[counter]
 	t.undo = append(t.undo, func() { t.s.counters[counter] = old })
 	t.s.counters[counter] = old + 1
@@ -276,7 +317,8 @@ func (t *txn) Bump(day, key string) (int, bool) {
 	return old + 1, true
 }
 
-func (t *txn) Append(r logbook.Record) {
+func (t *txn) Append(r logbook.Record) uint64 {
+	r.Seq = t.next(counterLedger)
 	n := len(t.s.ledger)
 	if n >= 2*LedgerKept {
 		old := t.s.ledger
@@ -286,7 +328,13 @@ func (t *txn) Append(r logbook.Record) {
 	}
 	t.undo = append(t.undo, func() { t.s.ledger = t.s.ledger[:n] })
 	t.s.ledger = append(t.s.ledger, r)
+	return r.Seq
 }
+
+// The stand-in has no separate record of evaluations or decisions. What
+// Assay and Countersign report is kept with the item's other results.
+func (t *txn) Evaluation(string, json.RawMessage) {}
+func (t *txn) Decision(string, string, string)    {}
 
 func restore[V any](m map[string]V, key string, old V, had bool) {
 	if had {

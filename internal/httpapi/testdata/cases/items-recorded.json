@@ -136,7 +136,7 @@
       },
       "status": 200,
       "want": {
-        "lease": "PA-0042.1",
+        "lease": "PA-0042.2.1",
         "kind": "item",
         "id": "PA-0042",
         "state": "discovered",
@@ -156,7 +156,7 @@
       "path": "/v1/complete",
       "send": {
         "contract": "v1",
-        "lease": "PA-0042.1",
+        "lease": "PA-0042.2.1",
         "state": "recorded",
         "result": {
           "cleaned": "made-up"
@@ -196,7 +196,7 @@
       },
       "status": 200,
       "want": {
-        "lease": "PA-0043.2",
+        "lease": "PA-0043.3.1",
         "kind": "item",
         "id": "PA-0043",
         "state": "discovered",
@@ -219,7 +219,7 @@
       },
       "status": 200,
       "want": {
-        "lease": "PA-0045.3",
+        "lease": "PA-0045.5.1",
         "kind": "item",
         "id": "PA-0045",
         "state": "discovered",
@@ -243,7 +243,7 @@
       },
       "status": 200,
       "want": {
-        "lease": "PA-0044.4",
+        "lease": "PA-0044.4.1",
         "kind": "item",
         "id": "PA-0044",
         "state": "discovered",

@@ -6,7 +6,6 @@
 package queue
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"regexp"
@@ -65,25 +64,8 @@ type IncidentView struct {
 	State  lifecycle.State `json:"state"`
 }
 
-// HeldView is what Countersign is told about a held item under
-// results.held: the worker that stopped, and the code it gave.
-type HeldView struct {
-	Worker string `json:"worker"`
-	Code   string `json:"code"`
-}
-
-// IncidentWorker is the worker incident steps are for, and ReleaseWorker
-// the worker release steps are for.
-const (
-	IncidentWorker = "bellbuoy"
-	ReleaseWorker  = "countersign"
-)
-
-// The two decisions the owner can make about a held item.
-const (
-	DecideRelease = "release"
-	DecideKeep    = "keep"
-)
+// IncidentWorker is the worker incident steps are for.
+const IncidentWorker = "bellbuoy"
 
 // ProposalView is what a worker is shown of an edit proposal.
 type ProposalView struct {
@@ -132,13 +114,12 @@ func (s *Service) Lease(ctx context.Context, worker string) (*Grant, error) {
 			record(tx, now, worker, logbook.ActSetAside, e.Key, state, state, string(contract.Parse))
 			if _, isItem := tx.Item(e.Subject); isItem && e.Kind == lifecycle.KindItem {
 				openIncident(tx, now, e.Subject, worker, contract.Parse, state)
-				openRelease(tx, now, e.Subject, worker, contract.Parse, state)
 			}
 			setAside = true
 			return nil
 		}
 		e.Attempt++
-		e.Lease = e.Key + "." + strconv.FormatUint(tx.Next(logbook.CounterLease), 10)
+		e.Lease = leaseOf(e)
 		e.Expires = now.Add(s.LeaseFor)
 		tx.PutEntry(e)
 		record(tx, now, worker, logbook.ActLease, e.Key, state, state, "")
@@ -165,16 +146,6 @@ func (s *Service) Lease(ctx context.Context, worker string) (*Grant, error) {
 			grant.Proposal = &ProposalView{
 				Target: p.Target, Repository: p.Repository, File: p.File,
 				EditKind: p.EditKind, Change: p.Change, Reason: p.Reason,
-			}
-		case lifecycle.KindRelease:
-			it, _ := tx.Item(e.Subject)
-			held, err := json.Marshal(HeldView{Worker: e.Incident.Worker, Code: e.Incident.Code})
-			if err != nil {
-				return contract.Unexpected
-			}
-			grant.Results = withResult(it.Results, "held", held)
-			if it.Address != "" {
-				grant.Found = &FoundView{Source: it.Source, Title: it.Title, Address: it.Address}
 			}
 		case lifecycle.KindIncident:
 			grant.Incident = &IncidentView{
@@ -220,44 +191,9 @@ func (s *Service) Complete(ctx context.Context, worker, lease string, to lifecyc
 		after = nil
 		e, ok := held(tx, worker, lease)
 		if !ok {
-			return repeated(tx, worker, lease, callComplete, completeArg(lease, to, result), &ack)
+			return repeated(tx, worker, lease, callComplete, string(to), &ack)
 		}
 		now := s.Clock()
-		if e.Kind == lifecycle.KindRelease {
-			// A release step carries the owner's decision about a held
-			// item and changes no state.
-			if to != e.Incident.State {
-				return contract.MoveNotAllowed
-			}
-			decision, problem := decisionOf(result)
-			if problem != nil {
-				return problem
-			}
-			ack = logbook.Ack{ID: e.Subject, State: to}
-			action := logbook.ActKeep
-			own, queued := tx.Entry(e.Subject)
-			switch {
-			case decision == DecideKeep || !queued || !own.Held:
-				// Kept, or there is nothing held to release any more.
-				ack.Held = queued && own.Held
-			default:
-				action = logbook.ActRelease
-				own.Held, own.Lease, own.Expires = false, "", time.Time{}
-				own.Lane, own.Arrival = lifecycle.Urgent, tx.Next(logbook.CounterArrival)
-				tx.PutEntry(own)
-				ack.Next = own.Worker
-			}
-			if it, ok := tx.Item(e.Subject); ok {
-				if ack.Next != "" {
-					it.Lane = lifecycle.Urgent
-				}
-				it.ReleaseDone = logbook.Finished{Lease: lease, Worker: worker, Call: callComplete, Arg: completeArg(lease, to, result), Ack: ack}
-				tx.PutItem(it)
-			}
-			tx.DeleteEntry(e.Key)
-			record(tx, now, worker, action, e.Subject, to, to, "")
-			return nil
-		}
 		if e.Kind == lifecycle.KindIncident {
 			// An incident step changes no state. Completing it says the
 			// incident has been dealt with, and nothing more.
@@ -300,6 +236,14 @@ func (s *Service) Complete(ctx context.Context, worker, lease string, to lifecyc
 				it.Results = withResult(it.Results, worker, result)
 			}
 			tx.PutItem(it)
+			switch {
+			case worker == "assay" && result != nil:
+				tx.Evaluation(it.ID, result)
+			case worker == "countersign":
+				if outcome, ok := outcomes[lifecycle.Move{From: from, To: to}]; ok {
+					tx.Decision(it.ID, outcome, reasonIn(result))
+				}
+			}
 		case lifecycle.KindProposal:
 			p, _ := tx.Proposal(e.Subject)
 			p.Status, p.Done = to, done
@@ -322,7 +266,6 @@ func (s *Service) Complete(ctx context.Context, worker, lease string, to lifecyc
 				Kind:    e.Kind,
 				Worker:  route.Next,
 				Lane:    lane,
-				Arrival: tx.Next(logbook.CounterArrival),
 			}
 			if route.AfterDays > 0 {
 				next.NotBefore = now.AddDate(0, 0, route.AfterDays).UTC()
@@ -341,13 +284,35 @@ func (s *Service) Complete(ctx context.Context, worker, lease string, to lifecyc
 	return &ack, nil
 }
 
+// outcomes names each of the owner's decisions the way Logbook's
+// decision trail does.
+var outcomes = map[lifecycle.Move]string{
+	{From: lifecycle.Scored, To: lifecycle.Approved}:      "build",
+	{From: lifecycle.Scored, To: lifecycle.Linked}:        "link",
+	{From: lifecycle.Scored, To: lifecycle.Merged}:        "merge",
+	{From: lifecycle.Scored, To: lifecycle.Parked}:        "park",
+	{From: lifecycle.Scored, To: lifecycle.Rejected}:      "reject",
+	{From: lifecycle.ScreenedOut, To: lifecycle.Observed}: "reopen",
+}
+
+// reasonIn returns the reason a decision's result gives, if it gives one
+// as text.
+func reasonIn(result json.RawMessage) string {
+	var r struct {
+		Reason string `json:"reason"`
+	}
+	if result == nil || json.Unmarshal(result, &r) != nil {
+		return ""
+	}
+	return r.Reason
+}
+
 // Fail records that a step could not be done.
 //
 // E_TIMEOUT leaves the step in the queue to be tried again. E_PARSE
 // stops work on it: the subject keeps its state and the step is never
 // offered again, unless the owner releases it. When the step is an
-// item's own, Bellbuoy is given one incident step about it and
-// Countersign one release step.
+// item's own, Bellbuoy is given one incident step about it.
 // E_NEEDS_SUBTOOL has a call of its own and is refused here.
 func (s *Service) Fail(ctx context.Context, worker, lease string, code contract.Code) (*logbook.Ack, error) {
 	switch code {
@@ -378,7 +343,6 @@ func (s *Service) Fail(ctx context.Context, worker, lease string, code contract.
 		record(tx, now, worker, logbook.ActFail, e.Key, state, state, string(code))
 		if code == contract.Parse && e.Kind == lifecycle.KindItem {
 			openIncident(tx, now, e.Subject, worker, contract.Parse, state)
-			openRelease(tx, now, e.Subject, worker, contract.Parse, state)
 		}
 		return nil
 	})
@@ -441,57 +405,42 @@ func Replay(tx logbook.Tx, worker string, now time.Time) int {
 			Kind:    lifecycle.KindItem,
 			Worker:  worker,
 			Lane:    lifecycle.Urgent,
-			Arrival: tx.Next(logbook.CounterArrival),
 		})
 		record(tx, now, worker, logbook.ActReplay, it.ID, lifecycle.NeedsSubtool, back, "")
 	}
 	return len(paused)
 }
 
-// openRelease gives Countersign one release step about a held item, so
-// that the owner can decide whether it runs again.
-func openRelease(tx logbook.Tx, now time.Time, itemID, worker string, code contract.Code, state lifecycle.State) {
-	tx.PutEntry(logbook.Entry{
-		Key:      logbook.ReleaseKey(itemID),
-		Subject:  itemID,
-		Kind:     lifecycle.KindRelease,
-		Worker:   ReleaseWorker,
-		Lane:     lifecycle.Normal,
-		Arrival:  tx.Next(logbook.CounterArrival),
-		Incident: logbook.Incident{Worker: worker, Code: string(code), State: state},
-	})
-}
-
-// decisionOf reads the owner's decision from the result of a release
-// step: exactly {"decision": "release"} or {"decision": "keep"}.
-func decisionOf(result json.RawMessage) (string, *contract.Problem) {
-	if result == nil {
-		return "", contract.MissingField
+// Release carries out the owner's decision to let a stopped item run
+// again. The item keeps the state it was stopped in, and its step goes
+// back to the worker it was for, at the end of the urgent lane. Only an
+// item whose step is held can be released.
+func (s *Service) Release(ctx context.Context, caller, id string) (*logbook.Ack, error) {
+	if !lifecycle.IsItemID(id) {
+		return nil, contract.BadField
 	}
-	var r struct {
-		Decision *string `json:"decision"`
-	}
-	dec := json.NewDecoder(bytes.NewReader(result))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&r); err != nil || r.Decision == nil {
-		return "", contract.BadField
-	}
-	if *r.Decision != DecideRelease && *r.Decision != DecideKeep {
-		return "", contract.BadField
-	}
-	return *r.Decision, nil
-}
-
-// completeArg is what tells one complete call from another under the
-// same lease: the state, and for a release step the decision too.
-func completeArg(lease string, to lifecycle.State, result json.RawMessage) string {
-	arg := string(to)
-	if strings.HasPrefix(lease, logbook.ReleaseKey("")) {
-		if decision, problem := decisionOf(result); problem == nil {
-			arg += " " + decision
+	var ack logbook.Ack
+	err := s.Store.Update(ctx, func(tx logbook.Tx) error {
+		it, ok := tx.Item(id)
+		e, queued := tx.Entry(id)
+		if !ok || !queued || !e.Held {
+			return contract.MoveNotAllowed
 		}
+		now := s.Clock()
+		e.Held, e.Lease, e.Expires = false, "", time.Time{}
+		// A zero arrival sends the step to the end of its new lane.
+		e.Lane, e.Arrival = lifecycle.Urgent, 0
+		tx.PutEntry(e)
+		it.Lane = lifecycle.Urgent
+		tx.PutItem(it)
+		ack = logbook.Ack{ID: id, State: it.State, Next: e.Worker}
+		record(tx, now, caller, logbook.ActRelease, id, it.State, it.State, "")
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
-	return arg
+	return &ack, nil
 }
 
 // openIncident gives Bellbuoy one incident step about an item. An item
@@ -504,20 +453,27 @@ func openIncident(tx logbook.Tx, now time.Time, itemID, worker string, code cont
 		Kind:     lifecycle.KindIncident,
 		Worker:   IncidentWorker,
 		Lane:     lifecycle.Normal,
-		Arrival:  tx.Next(logbook.CounterArrival),
 		Incident: logbook.Incident{Worker: worker, Code: string(code), State: state},
 	})
 	record(tx, now, worker, logbook.ActIncident, itemID, state, state, string(code))
 }
 
-var leaseForm = regexp.MustCompile(`^((?:incident:|release:)?` + lifecycle.ItemIDForm + `|` + lifecycle.ProposalIDForm + `)\.[1-9][0-9]{0,18}$`)
+// A lease names the step it is on, the step's place in the order of
+// arrival, and which attempt at the step it is: PA-0001.7.2 is the
+// second attempt at the step that arrived seventh. Each of the three is
+// on record, so a lease can be checked against the record alone.
+var leaseForm = regexp.MustCompile(`^((?:incident:)?` + lifecycle.ItemIDForm + `|` + lifecycle.ProposalIDForm + `)\.[1-9][0-9]{0,18}\.[1-9][0-9]{0,8}$`)
+
+func leaseOf(e logbook.Entry) string {
+	return e.Key + "." + strconv.FormatUint(e.Arrival, 10) + "." + strconv.Itoa(e.Attempt)
+}
 
 // keyOf returns the queue key a lease was issued for.
 func keyOf(lease string) (string, bool) {
 	if !leaseForm.MatchString(lease) {
 		return "", false
 	}
-	return lease[:strings.LastIndexByte(lease, '.')], true
+	return lease[:strings.IndexByte(lease, '.')], true
 }
 
 // held returns the entry a worker holds under a lease. A lease is held
@@ -550,10 +506,6 @@ func repeated(tx logbook.Tx, worker, lease, call, arg string, ack *logbook.Ack) 
 		if it, ok := tx.Item(id); ok {
 			done = it.IncidentDone
 		}
-	} else if id, isRelease := strings.CutPrefix(key, logbook.ReleaseKey("")); isRelease {
-		if it, ok := tx.Item(id); ok {
-			done = it.ReleaseDone
-		}
 	} else if it, ok := tx.Item(key); ok {
 		done = it.Done
 	} else if p, ok := tx.Proposal(key); ok {
@@ -568,14 +520,11 @@ func repeated(tx logbook.Tx, worker, lease, call, arg string, ack *logbook.Ack) 
 
 func remember(tx logbook.Tx, e logbook.Entry, done logbook.Finished) {
 	switch e.Kind {
-	case lifecycle.KindItem, lifecycle.KindIncident, lifecycle.KindRelease:
+	case lifecycle.KindItem, lifecycle.KindIncident:
 		if it, ok := tx.Item(e.Subject); ok {
-			switch e.Kind {
-			case lifecycle.KindIncident:
+			if e.Kind == lifecycle.KindIncident {
 				it.IncidentDone = done
-			case lifecycle.KindRelease:
-				it.ReleaseDone = done
-			default:
+			} else {
 				it.Done = done
 			}
 			tx.PutItem(it)
@@ -589,8 +538,8 @@ func remember(tx logbook.Tx, e logbook.Entry, done logbook.Finished) {
 }
 
 // stepState returns the state a step is about: the item's state, the
-// proposal's status, or for an incident or a release the state the item
-// was stopped in.
+// proposal's status, or for an incident the state the item was stopped
+// in.
 func stepState(tx logbook.Tx, e logbook.Entry) (lifecycle.State, bool) {
 	switch e.Kind {
 	case lifecycle.KindItem:
@@ -599,7 +548,7 @@ func stepState(tx logbook.Tx, e logbook.Entry) (lifecycle.State, bool) {
 	case lifecycle.KindProposal:
 		p, ok := tx.Proposal(e.Subject)
 		return p.Status, ok
-	case lifecycle.KindIncident, lifecycle.KindRelease:
+	case lifecycle.KindIncident:
 		_, ok := tx.Item(e.Subject)
 		return e.Incident.State, ok
 	}
@@ -609,11 +558,8 @@ func stepState(tx logbook.Tx, e logbook.Entry) (lifecycle.State, bool) {
 // mayHold reports whether the tables give this worker a step of this
 // kind on a subject in this state.
 func mayHold(worker string, e logbook.Entry, state lifecycle.State) bool {
-	switch e.Kind {
-	case lifecycle.KindIncident:
+	if e.Kind == lifecycle.KindIncident {
 		return worker == IncidentWorker
-	case lifecycle.KindRelease:
-		return worker == ReleaseWorker
 	}
 	return lifecycle.Holds(worker, e.Kind, state)
 }
@@ -628,12 +574,10 @@ func withResult(old map[string]json.RawMessage, worker string, result json.RawMe
 }
 
 func record(tx logbook.Tx, at time.Time, actor, action, subject string, from, to lifecycle.State, code string) uint64 {
-	seq := tx.Next(logbook.CounterLedger)
-	tx.Append(logbook.Record{
-		Seq: seq, At: at.UTC(), Actor: actor, Action: action,
+	return tx.Append(logbook.Record{
+		At: at.UTC(), Actor: actor, Action: action,
 		Subject: subject, From: from, To: to, Code: code,
 	})
-	return seq
 }
 
 // Record writes one ledger line. It is for the other packages that write

@@ -121,7 +121,7 @@ func TestSourceKeySavedExamples(t *testing.T) {
 }
 
 func TestOwnershipRefusals(t *testing.T) {
-	good := `{"elements":{"a/b":{"repository":"sextant","file":"tools/x/rule.json","kind":"CONFIG"}}}`
+	good := `{"elements":{"a.b":{"repository":"sextant","file":"tools/x/rule.json","kind":"CONFIG"}}}`
 	if _, err := ParseOwnership([]byte(good)); err != nil {
 		t.Fatalf("a good map was refused: %v", err)
 	}
@@ -129,13 +129,15 @@ func TestOwnershipRefusals(t *testing.T) {
 		"not JSON":                    `elements`,
 		"no elements":                 `{}`,
 		"an unknown top-level field":  `{"elements":{},"owner":"made-up"}`,
-		"an unknown field in a row":   `{"elements":{"a/b":{"repository":"sextant","file":"f","kind":"DATA","note":"x"}}}`,
-		"a repository not registered": `{"elements":{"a/b":{"repository":"made-up","file":"f","kind":"DATA"}}}`,
-		"a kind that does not exist":  `{"elements":{"a/b":{"repository":"sextant","file":"f","kind":"OTHER"}}}`,
-		"a kind in lower case":        `{"elements":{"a/b":{"repository":"sextant","file":"f","kind":"data"}}}`,
-		"no file":                     `{"elements":{"a/b":{"repository":"sextant","file":"","kind":"DATA"}}}`,
+		"an unknown field in a row":   `{"elements":{"a.b":{"repository":"sextant","file":"f","kind":"DATA","note":"x"}}}`,
+		"a repository not registered": `{"elements":{"a.b":{"repository":"made-up","file":"f","kind":"DATA"}}}`,
+		"a kind that does not exist":  `{"elements":{"a.b":{"repository":"sextant","file":"f","kind":"OTHER"}}}`,
+		"a kind in lower case":        `{"elements":{"a.b":{"repository":"sextant","file":"f","kind":"data"}}}`,
+		"no file":                     `{"elements":{"a.b":{"repository":"sextant","file":"","kind":"DATA"}}}`,
 		"an empty target":             `{"elements":{"":{"repository":"sextant","file":"f","kind":"DATA"}}}`,
 		"a target with a line break":  `{"elements":{"a\nb":{"repository":"sextant","file":"f","kind":"DATA"}}}`,
+		"a target with a slash":       `{"elements":{"a/b":{"repository":"sextant","file":"f","kind":"DATA"}}}`,
+		"a target in upper case":      `{"elements":{"A.b":{"repository":"sextant","file":"f","kind":"DATA"}}}`,
 		"a target that is too long":   `{"elements":{"` + strings.Repeat("a", MaxTargetBytes+1) + `":{"repository":"sextant","file":"f","kind":"DATA"}}}`,
 		"two values":                  good + good,
 	}
