@@ -1,0 +1,40 @@
+id: 1
+event: depths
+data: {"at":"2026-01-05T09:00:00Z","urgent":1,"normal":2,"backfill":1,"needs_subtool":0}
+
+id: 2
+event: health
+data: {"at":"2026-01-05T08:58:00Z","component":"assay","state":"degraded","code":"E_TIMEOUT"}
+
+id: 3
+event: health
+data: {"at":"2026-01-05T08:59:00Z","component":"sextant","state":"healthy"}
+
+id: 4
+event: depths
+data: {"at":"2026-01-05T09:00:05Z","urgent":1,"normal":2,"backfill":1,"needs_subtool":0}
+
+id: 5
+event: depths
+data: {"at":"2026-01-05T09:00:10Z","urgent":1,"normal":1,"backfill":1,"needs_subtool":1}
+
+id: 6
+event: health
+data: {"at":"2026-01-05T09:00:08Z","component":"sextant","state":"paused","code":"E_NEEDS_SUBTOOL"}
+
+id: 7
+event: health
+data: {"at":"2026-01-05T09:00:06Z","component":"trawl","state":"idle"}
+
+id: 8
+event: edit
+data: {"at":"2026-01-05T09:00:06Z","id":"EP-0001","status":"pending_approval"}
+
+id: 9
+event: edit
+data: {"at":"2026-01-05T09:00:08Z","id":"EP-0001","status":"approved"}
+
+id: 10
+event: depths
+data: {"at":"2026-01-05T09:00:15Z","urgent":1,"normal":1,"backfill":1,"needs_subtool":1}
+
