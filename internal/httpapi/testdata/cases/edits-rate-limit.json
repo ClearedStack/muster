@@ -114,7 +114,8 @@
       "status": 429,
       "want": {
         "error": "E_TIMEOUT",
-        "reason": "too many submissions from this source today; try again tomorrow"
+        "cause": "rate_limited",
+        "reason": "too many submissions from this visitor today; try again tomorrow"
       }
     },
     {
@@ -154,7 +155,8 @@
       "status": 429,
       "want": {
         "error": "E_TIMEOUT",
-        "reason": "too many submissions from this source today; try again tomorrow"
+        "cause": "rate_limited",
+        "reason": "too many submissions from this visitor today; try again tomorrow"
       }
     },
     {
@@ -174,6 +176,7 @@
       "status": 400,
       "want": {
         "error": "E_PARSE",
+        "cause": "bad_field",
         "reason": "the target is not in the ownership map"
       }
     },
@@ -271,7 +274,8 @@
       "status": 429,
       "want": {
         "error": "E_TIMEOUT",
-        "reason": "too many submissions from this source today; try again tomorrow"
+        "cause": "rate_limited",
+        "reason": "too many submissions from this visitor today; try again tomorrow"
       }
     },
     {

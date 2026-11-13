@@ -9,23 +9,34 @@ package lifecycle
 // From and To are equal when a worker finishes its step without changing
 // the state, as Waybill does when it writes a specification for an
 // approved item.
+//
+// AfterDays, when it is not zero, holds the next step back: it is not
+// offered until that many days have passed.
 type Route struct {
-	Worker string `json:"worker"`
-	Kind   Kind   `json:"kind"`
-	From   State  `json:"from"`
-	To     State  `json:"to"`
-	Next   string `json:"next,omitempty"`
-	Lane   Lane   `json:"lane,omitempty"`
+	Worker    string `json:"worker"`
+	Kind      Kind   `json:"kind"`
+	From      State  `json:"from"`
+	To        State  `json:"to"`
+	Next      string `json:"next,omitempty"`
+	Lane      Lane   `json:"lane,omitempty"`
+	AfterDays int    `json:"after_days,omitempty"`
 }
 
-// routes covers stages 1 to 8 of the pipeline and the two steps of an
-// edit proposal. Each row comes from the published description of the
-// worker named in it.
+// CheckEveryDays is how often Tidegauge is given a live item to check.
+const CheckEveryDays = 7
+
+// routes covers the pipeline's stages and the two steps of an edit
+// proposal. Each row comes from the published description of the worker
+// named in it, or from the contract.
 //
-// Tidegauge has no row. Its moves (live to building or retired; parked,
-// linked or merged back to observed) are allowed by the state table, but
-// nothing says what a scheduled check is or which worker follows one, so
-// no queue step can be built for it without guessing.
+// Tidegauge is given every live item to check, every seven days, in the
+// backfill lane. A check that finds nothing leaves the item live and
+// sets the next check. A check that finds the rule repealed retires the
+// item, and Chartroom takes it from there.
+//
+// Four of Tidegauge's moves still have no row: live to building, and
+// parked, linked or merged back to observed. The state table allows
+// them, and nothing says which worker follows.
 var routes = []Route{
 	{Worker: "trawl", Kind: KindItem, From: Discovered, To: Recorded, Next: "sextant"},
 	{Worker: "trawl", Kind: KindItem, From: Discovered, To: Rejected},
@@ -42,9 +53,12 @@ var routes = []Route{
 	{Worker: "moldloft", Kind: KindItem, From: Approved, To: Building, Next: "shakedown"},
 	{Worker: "shakedown", Kind: KindItem, From: Building, To: Building, Next: "chartroom"},
 	{Worker: "shakedown", Kind: KindItem, From: Building, To: Parked},
-	{Worker: "chartroom", Kind: KindItem, From: Building, To: Live},
+	{Worker: "chartroom", Kind: KindItem, From: Building, To: Live, Next: "tidegauge", Lane: Backfill, AfterDays: CheckEveryDays},
 	{Worker: "chartroom", Kind: KindItem, From: Linked, To: Linked},
 	{Worker: "chartroom", Kind: KindItem, From: Merged, To: Merged},
+	{Worker: "chartroom", Kind: KindItem, From: Retired, To: Retired},
+	{Worker: "tidegauge", Kind: KindItem, From: Live, To: Live, Next: "tidegauge", Lane: Backfill, AfterDays: CheckEveryDays},
+	{Worker: "tidegauge", Kind: KindItem, From: Live, To: Retired, Next: "chartroom", Lane: Urgent},
 
 	{Worker: "countersign", Kind: KindProposal, From: PendingApproval, To: Approved, Next: "bellbuoy", Lane: Urgent},
 	{Worker: "countersign", Kind: KindProposal, From: PendingApproval, To: Declined},

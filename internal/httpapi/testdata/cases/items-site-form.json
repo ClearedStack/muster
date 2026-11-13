@@ -1,0 +1,306 @@
+{
+  "about": "A candidate from the form on the site passes the same proof of work as an edit proposal and counts against the same daily limit for that visitor.",
+  "steps": [
+    {
+      "note": "kept",
+      "as": "conn",
+      "method": "POST",
+      "path": "/v1/items",
+      "send": {
+        "contract": "v1",
+        "source": "site-form",
+        "title": "A made-up tool a visitor asked for",
+        "address": "https://example.org/made-up/asked-for-1",
+        "pow": "2026-01-05.70b6f",
+        "visitor": "203.0.113.7"
+      },
+      "status": 201,
+      "want": {
+        "id": "PA-0001",
+        "state": "discovered",
+        "next": "trawl"
+      }
+    },
+    {
+      "note": "the same token cannot carry a different address",
+      "as": "conn",
+      "method": "POST",
+      "path": "/v1/items",
+      "send": {
+        "contract": "v1",
+        "source": "site-form",
+        "title": "A made-up tool a visitor asked for",
+        "address": "https://example.org/made-up/asked-for-2",
+        "pow": "2026-01-05.70b6f",
+        "visitor": "203.0.113.7"
+      },
+      "status": 400,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "bad_field",
+        "reason": "the proof of work is not valid"
+      }
+    },
+    {
+      "note": "no token",
+      "as": "conn",
+      "method": "POST",
+      "path": "/v1/items",
+      "send": {
+        "contract": "v1",
+        "source": "site-form",
+        "title": "A made-up tool a visitor asked for",
+        "address": "https://example.org/made-up/asked-for-1",
+        "pow": "",
+        "visitor": "203.0.113.7"
+      },
+      "status": 400,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "missing_field",
+        "reason": "a required field is missing"
+      }
+    },
+    {
+      "note": "no visitor",
+      "as": "conn",
+      "method": "POST",
+      "path": "/v1/items",
+      "send": {
+        "contract": "v1",
+        "source": "site-form",
+        "title": "A made-up tool a visitor asked for",
+        "address": "https://example.org/made-up/asked-for-1",
+        "pow": "2026-01-05.0",
+        "visitor": ""
+      },
+      "status": 400,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "missing_field",
+        "reason": "a required field is missing"
+      }
+    },
+    {
+      "note": "a visitor that is not an address",
+      "as": "conn",
+      "method": "POST",
+      "path": "/v1/items",
+      "send": {
+        "contract": "v1",
+        "source": "site-form",
+        "title": "A made-up tool a visitor asked for",
+        "address": "https://example.org/made-up/asked-for-1",
+        "pow": "2026-01-05.0",
+        "visitor": "made-up-host"
+      },
+      "status": 400,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "bad_field",
+        "reason": "a field does not have the form this call requires"
+      }
+    },
+    {
+      "note": "a token that does not solve the puzzle",
+      "as": "conn",
+      "method": "POST",
+      "path": "/v1/items",
+      "send": {
+        "contract": "v1",
+        "source": "site-form",
+        "title": "A made-up tool a visitor asked for",
+        "address": "https://example.org/made-up/asked-for-1",
+        "pow": "2026-01-05.0",
+        "visitor": "203.0.113.7"
+      },
+      "status": 400,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "bad_field",
+        "reason": "the proof of work is not valid"
+      }
+    },
+    {
+      "note": "Trawl may send one too, with the same proof",
+      "as": "trawl",
+      "method": "POST",
+      "path": "/v1/items",
+      "send": {
+        "contract": "v1",
+        "source": "site-form",
+        "title": "A made-up notice about a made-up tool",
+        "address": "https://example.org/made-up/asked-for-3",
+        "pow": "2026-01-05.27f3c",
+        "visitor": "198.51.100.20"
+      },
+      "status": 201,
+      "want": {
+        "id": "PA-0002",
+        "state": "discovered",
+        "next": "trawl"
+      }
+    },
+    {
+      "note": "the visitor's edit proposals share the one count: this is their second submission today",
+      "as": "conn",
+      "method": "POST",
+      "path": "/v1/edits",
+      "send": {
+        "contract": "v1",
+        "target": "catalog/sample-calculator/description",
+        "change": "Made-up change 1.",
+        "reason": "It reads as if no rule applies.",
+        "pow": "2026-01-05.af6db",
+        "honeypot": "",
+        "source": "203.0.113.7"
+      },
+      "status": 202,
+      "want": {
+        "id": "EP-0001",
+        "status": "pending_approval"
+      }
+    },
+    {
+      "as": "conn",
+      "method": "POST",
+      "path": "/v1/edits",
+      "send": {
+        "contract": "v1",
+        "target": "catalog/sample-calculator/description",
+        "change": "Made-up change 2.",
+        "reason": "It reads as if no rule applies.",
+        "pow": "2026-01-05.124949",
+        "honeypot": "",
+        "source": "203.0.113.7"
+      },
+      "status": 202,
+      "want": {
+        "id": "EP-0002",
+        "status": "pending_approval"
+      }
+    },
+    {
+      "note": "a known address still counts: the fourth",
+      "as": "conn",
+      "method": "POST",
+      "path": "/v1/items",
+      "send": {
+        "contract": "v1",
+        "source": "site-form",
+        "title": "A made-up tool a visitor asked for",
+        "address": "https://example.org/made-up/asked-for-1",
+        "pow": "2026-01-05.70b6f",
+        "visitor": "203.0.113.7"
+      },
+      "status": 200,
+      "want": {
+        "id": "PA-0001",
+        "state": "discovered",
+        "duplicate": true
+      }
+    },
+    {
+      "note": "the fifth",
+      "as": "conn",
+      "method": "POST",
+      "path": "/v1/items",
+      "send": {
+        "contract": "v1",
+        "source": "site-form",
+        "title": "A made-up tool a visitor asked for",
+        "address": "https://example.org/made-up/asked-for-4",
+        "pow": "2026-01-05.2e4b27",
+        "visitor": "203.0.113.7"
+      },
+      "status": 201,
+      "want": {
+        "id": "PA-0003",
+        "state": "discovered",
+        "next": "trawl"
+      }
+    },
+    {
+      "note": "the sixth is refused",
+      "as": "conn",
+      "method": "POST",
+      "path": "/v1/items",
+      "send": {
+        "contract": "v1",
+        "source": "site-form",
+        "title": "A made-up tool a visitor asked for",
+        "address": "https://example.org/made-up/asked-for-5",
+        "pow": "2026-01-05.c79d1",
+        "visitor": "203.0.113.7"
+      },
+      "status": 429,
+      "want": {
+        "error": "E_TIMEOUT",
+        "cause": "rate_limited",
+        "reason": "too many submissions from this visitor today; try again tomorrow"
+      }
+    },
+    {
+      "note": "and so is an edit proposal from the same visitor",
+      "as": "conn",
+      "method": "POST",
+      "path": "/v1/edits",
+      "send": {
+        "contract": "v1",
+        "target": "catalog/sample-calculator/description",
+        "change": "Made-up change 3.",
+        "reason": "It reads as if no rule applies.",
+        "pow": "2026-01-05.1a687b",
+        "honeypot": "",
+        "source": "203.0.113.7"
+      },
+      "status": 429,
+      "want": {
+        "error": "E_TIMEOUT",
+        "cause": "rate_limited",
+        "reason": "too many submissions from this visitor today; try again tomorrow"
+      }
+    },
+    {
+      "note": "another visitor is not affected",
+      "as": "conn",
+      "method": "POST",
+      "path": "/v1/items",
+      "send": {
+        "contract": "v1",
+        "source": "site-form",
+        "title": "A made-up tool a visitor asked for",
+        "address": "https://example.org/made-up/asked-for-6",
+        "pow": "2026-01-05.f8008",
+        "visitor": "198.51.100.21"
+      },
+      "status": 201,
+      "want": {
+        "id": "PA-0004",
+        "state": "discovered",
+        "next": "trawl"
+      }
+    },
+    {
+      "note": "the next day the count starts again",
+      "wait": "24h",
+      "as": "conn",
+      "method": "POST",
+      "path": "/v1/items",
+      "send": {
+        "contract": "v1",
+        "source": "site-form",
+        "title": "A made-up tool a visitor asked for",
+        "address": "https://example.org/made-up/asked-for-7",
+        "pow": "2026-01-06.1dd65f",
+        "visitor": "203.0.113.7"
+      },
+      "status": 201,
+      "want": {
+        "id": "PA-0005",
+        "state": "discovered",
+        "next": "trawl"
+      }
+    }
+  ]
+}

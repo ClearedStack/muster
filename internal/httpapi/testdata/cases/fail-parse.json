@@ -1,5 +1,5 @@
 {
-  "about": "E_PARSE: the data was broken. Work on that item stops. It keeps its state and is not offered again; the rest of the queue carries on.",
+  "about": "E_PARSE: the data was broken. Work on that item stops. It keeps its state and is not offered again; the rest of the queue carries on. Bellbuoy is given one incident step about it, which changes no state.",
   "seed": {
     "items": [
       {
@@ -105,6 +105,143 @@
         "contract": "v1"
       },
       "status": 204
+    },
+    {
+      "note": "the incident: which item, which worker, which code, and the state it was in",
+      "as": "bellbuoy",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "incident:PA-0001.3",
+        "kind": "incident",
+        "id": "PA-0001",
+        "state": "recorded",
+        "lane": "normal",
+        "attempt": 1,
+        "expires": "2026-01-06T09:01:00Z",
+        "incident": {
+          "id": "PA-0001",
+          "worker": "sextant",
+          "code": "E_PARSE",
+          "state": "recorded"
+        }
+      }
+    },
+    {
+      "note": "an incident step changes no state",
+      "as": "bellbuoy",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "incident:PA-0001.3",
+        "state": "observed"
+      },
+      "status": 409,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "move_not_allowed",
+        "reason": "that move is not allowed"
+      }
+    },
+    {
+      "note": "and carries no result",
+      "as": "bellbuoy",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "incident:PA-0001.3",
+        "state": "recorded",
+        "result": {
+          "task": "made-up"
+        }
+      },
+      "status": 400,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "bad_field",
+        "reason": "a field does not have the form this call requires"
+      }
+    },
+    {
+      "note": "and cannot be paused",
+      "as": "bellbuoy",
+      "method": "POST",
+      "path": "/v1/needs_subtool",
+      "send": {
+        "contract": "v1",
+        "lease": "incident:PA-0001.3"
+      },
+      "status": 409,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "move_not_allowed",
+        "reason": "that move is not allowed"
+      }
+    },
+    {
+      "note": "completed with the state it was given",
+      "as": "bellbuoy",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "incident:PA-0001.3",
+        "state": "recorded"
+      },
+      "status": 200,
+      "want": {
+        "id": "PA-0001",
+        "state": "recorded"
+      }
+    },
+    {
+      "note": "the same call again: the same answer",
+      "as": "bellbuoy",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "incident:PA-0001.3",
+        "state": "recorded"
+      },
+      "status": 200,
+      "want": {
+        "id": "PA-0001",
+        "state": "recorded"
+      }
+    },
+    {
+      "note": "one incident, once",
+      "as": "bellbuoy",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 204
+    },
+    {
+      "note": "a late repeat of the fail still gets its own answer",
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/fail",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0001.1",
+        "code": "E_PARSE"
+      },
+      "status": 200,
+      "want": {
+        "id": "PA-0001",
+        "state": "recorded",
+        "held": true
+      }
     }
   ]
 }

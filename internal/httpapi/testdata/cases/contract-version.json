@@ -21,6 +21,7 @@
       "status": 422,
       "want": {
         "error": "E_NEEDS_SUBTOOL",
+        "cause": "unknown_contract",
         "reason": "this contract version is not known"
       }
     },
@@ -33,7 +34,8 @@
       "status": 400,
       "want": {
         "error": "E_PARSE",
-        "reason": "a required field is missing or malformed"
+        "cause": "missing_field",
+        "reason": "a required field is missing"
       }
     },
     {
@@ -47,6 +49,7 @@
       "status": 422,
       "want": {
         "error": "E_NEEDS_SUBTOOL",
+        "cause": "unknown_contract",
         "reason": "this contract version is not known"
       }
     },

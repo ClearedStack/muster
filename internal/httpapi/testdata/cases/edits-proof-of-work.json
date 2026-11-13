@@ -18,7 +18,8 @@
       "status": 400,
       "want": {
         "error": "E_PARSE",
-        "reason": "a required field is missing or malformed"
+        "cause": "missing_field",
+        "reason": "a required field is missing"
       }
     },
     {
@@ -38,6 +39,7 @@
       "status": 400,
       "want": {
         "error": "E_PARSE",
+        "cause": "bad_field",
         "reason": "the proof of work is not valid"
       }
     },
@@ -58,6 +60,7 @@
       "status": 400,
       "want": {
         "error": "E_PARSE",
+        "cause": "bad_field",
         "reason": "the proof of work is not valid"
       }
     },
@@ -98,6 +101,7 @@
       "status": 400,
       "want": {
         "error": "E_PARSE",
+        "cause": "bad_field",
         "reason": "the proof of work is not valid"
       }
     },
@@ -160,6 +164,7 @@
       "status": 400,
       "want": {
         "error": "E_PARSE",
+        "cause": "bad_field",
         "reason": "the proof of work is not valid"
       }
     }

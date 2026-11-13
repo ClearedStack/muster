@@ -27,7 +27,7 @@
     {"name": "a tag split by a comment", "in": "<<!-- x -->script>made_up()<<!-- x -->/script>text", "out": "text"},
     {"name": "a tag wrapped around a tag is removed on the next pass", "in": "<<b>b>bold<</b>/b>", "out": "bold"},
     {"name": "character references are left as text", "in": "&lt;b&gt; stays &amp; so does this", "out": "&lt;b&gt; stays &amp; so does this"},
-    {"name": "text that is not ASCII is kept", "in": "<i>Ünïcode</i> — text", "out": "Ünïcode — text"},
+    {"name": "text that is not ASCII is kept", "in": "<i>Ünïcode</i> ✓ tëxt", "out": "Ünïcode ✓ tëxt"},
     {"name": "nothing but markup leaves nothing", "in": "<script>made_up()</script><p></p>", "out": ""},
     {"name": "the empty string", "in": "", "out": ""}
   ]

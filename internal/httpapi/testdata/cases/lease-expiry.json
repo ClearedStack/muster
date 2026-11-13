@@ -72,6 +72,7 @@
       "status": 409,
       "want": {
         "error": "E_PARSE",
+        "cause": "lease_not_held",
         "reason": "the lease is not held"
       }
     },
@@ -88,6 +89,7 @@
       "status": 409,
       "want": {
         "error": "E_PARSE",
+        "cause": "lease_not_held",
         "reason": "the lease is not held"
       }
     },

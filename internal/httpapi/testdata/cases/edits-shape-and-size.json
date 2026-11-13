@@ -18,6 +18,7 @@
       "status": 400,
       "want": {
         "error": "E_PARSE",
+        "cause": "bad_field",
         "reason": "the target is not in the ownership map"
       }
     },
@@ -31,14 +32,36 @@
         "target": "catalog/sample-calculator/description",
         "change": "The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. ",
         "reason": "It reads as if no rule applies.",
-        "pow": "2026-01-05.0",
+        "pow": "2026-01-05.e63f1",
         "honeypot": "",
         "source": "203.0.113.7"
       },
       "status": 413,
       "want": {
         "error": "E_PARSE",
+        "cause": "too_large",
         "reason": "the request is too large"
+      }
+    },
+    {
+      "note": "the size check comes after the proof of work: with a bad token it is the token that is refused",
+      "as": "conn",
+      "method": "POST",
+      "path": "/v1/edits",
+      "send": {
+        "contract": "v1",
+        "target": "catalog/sample-calculator/description",
+        "change": "The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. The sample description is out of date. ",
+        "reason": "It reads as if no rule applies.",
+        "pow": "2026-01-05.0",
+        "honeypot": "",
+        "source": "203.0.113.7"
+      },
+      "status": 400,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "bad_field",
+        "reason": "the proof of work is not valid"
       }
     },
     {
@@ -105,7 +128,8 @@
       "status": 400,
       "want": {
         "error": "E_PARSE",
-        "reason": "nothing is left of the proposal once markup is removed"
+        "cause": "bad_field",
+        "reason": "nothing is left of the text once markup is removed"
       }
     },
     {
@@ -125,7 +149,8 @@
       "status": 400,
       "want": {
         "error": "E_PARSE",
-        "reason": "a required field is missing or malformed"
+        "cause": "bad_field",
+        "reason": "a field does not have the form this call requires"
       }
     },
     {
@@ -145,7 +170,8 @@
       "status": 400,
       "want": {
         "error": "E_PARSE",
-        "reason": "a required field is missing or malformed"
+        "cause": "missing_field",
+        "reason": "a required field is missing"
       }
     },
     {
@@ -165,7 +191,8 @@
       "status": 400,
       "want": {
         "error": "E_PARSE",
-        "reason": "a required field is missing or malformed"
+        "cause": "missing_field",
+        "reason": "a required field is missing"
       }
     },
     {
@@ -186,7 +213,8 @@
       "status": 400,
       "want": {
         "error": "E_PARSE",
-        "reason": "the request could not be read"
+        "cause": "unknown_field",
+        "reason": "the request has a field this call does not define"
       }
     }
   ]

@@ -41,9 +41,31 @@ type Grant struct {
 	Lane     lifecycle.Lane             `json:"lane"`
 	Attempt  int                        `json:"attempt"`
 	Expires  string                     `json:"expires"`
+	Found    *FoundView                 `json:"found,omitempty"`
 	Results  map[string]json.RawMessage `json:"results,omitempty"`
 	Proposal *ProposalView              `json:"proposal,omitempty"`
+	Incident *IncidentView              `json:"incident,omitempty"`
 }
+
+// FoundView is where an item was found, as it was recorded.
+type FoundView struct {
+	Source  string `json:"source"`
+	Title   string `json:"title"`
+	Address string `json:"address"`
+}
+
+// IncidentView is what Bellbuoy is told about an item that was stopped
+// or paused: the item, the worker that stopped, the error code, and the
+// state the item was in.
+type IncidentView struct {
+	ID     string          `json:"id"`
+	Worker string          `json:"worker"`
+	Code   string          `json:"code"`
+	State  lifecycle.State `json:"state"`
+}
+
+// IncidentWorker is the worker incident steps are for.
+const IncidentWorker = "bellbuoy"
 
 // ProposalView is what a worker is shown of an edit proposal.
 type ProposalView struct {
@@ -82,22 +104,25 @@ func (s *Service) Lease(ctx context.Context, worker string) (*Grant, error) {
 		if !ok {
 			return nil
 		}
-		state, found := subjectState(tx, e)
-		if !found || !lifecycle.Holds(worker, e.Kind, state) {
+		state, found := stepState(tx, e)
+		if !found || !mayHold(worker, e, state) {
 			// The queue says this worker is next, and the tables say it
 			// has nothing to do with a subject in this state. Stop work
 			// on the subject so the rest of the queue is not blocked.
 			e.Held, e.Lease, e.Expires = true, "", time.Time{}
 			tx.PutEntry(e)
-			record(tx, now, worker, logbook.ActSetAside, e.Subject, state, state, string(contract.Parse))
+			record(tx, now, worker, logbook.ActSetAside, e.Key, state, state, string(contract.Parse))
+			if _, isItem := tx.Item(e.Subject); isItem && e.Kind == lifecycle.KindItem {
+				openIncident(tx, now, e.Subject, worker, contract.Parse, state)
+			}
 			setAside = true
 			return nil
 		}
 		e.Attempt++
-		e.Lease = e.Subject + "." + strconv.FormatUint(tx.Next(logbook.CounterLease), 10)
+		e.Lease = e.Key + "." + strconv.FormatUint(tx.Next(logbook.CounterLease), 10)
 		e.Expires = now.Add(s.LeaseFor)
 		tx.PutEntry(e)
-		record(tx, now, worker, logbook.ActLease, e.Subject, state, state, "")
+		record(tx, now, worker, logbook.ActLease, e.Key, state, state, "")
 
 		grant = &Grant{
 			Lease:   e.Lease,
@@ -112,11 +137,18 @@ func (s *Service) Lease(ctx context.Context, worker string) (*Grant, error) {
 		case lifecycle.KindItem:
 			it, _ := tx.Item(e.Subject)
 			grant.Results = it.Results
+			if it.Address != "" {
+				grant.Found = &FoundView{Source: it.Source, Title: it.Title, Address: it.Address}
+			}
 		case lifecycle.KindProposal:
 			p, _ := tx.Proposal(e.Subject)
 			grant.Proposal = &ProposalView{
 				Target: p.Target, Repository: p.Repository, File: p.File,
 				EditKind: p.EditKind, Change: p.Change, Reason: p.Reason,
+			}
+		case lifecycle.KindIncident:
+			grant.Incident = &IncidentView{
+				ID: e.Subject, Worker: e.Incident.Worker, Code: e.Incident.Code, State: e.Incident.State,
 			}
 		}
 		return nil
@@ -125,7 +157,7 @@ func (s *Service) Lease(ctx context.Context, worker string) (*Grant, error) {
 		return nil, err
 	}
 	if setAside {
-		return nil, contract.Inconsistent
+		return nil, contract.BadRecord
 	}
 	return grant, nil
 }
@@ -161,7 +193,26 @@ func (s *Service) Complete(ctx context.Context, worker, lease string, to lifecyc
 			return repeated(tx, worker, lease, callComplete, string(to), &ack)
 		}
 		now := s.Clock()
-		from, _ := subjectState(tx, e)
+		if e.Kind == lifecycle.KindIncident {
+			// An incident step changes no state. Completing it says the
+			// incident has been dealt with, and nothing more.
+			if to != e.Incident.State {
+				return contract.MoveNotAllowed
+			}
+			if result != nil {
+				return contract.BadField
+			}
+			ack = logbook.Ack{ID: e.Subject, State: to}
+			if it, ok := tx.Item(e.Subject); ok {
+				it.IncidentDone = logbook.Finished{Lease: lease, Worker: worker, Call: callComplete, Arg: string(to), Ack: ack}
+				tx.PutItem(it)
+			}
+			tx.DeleteEntry(e.Key)
+			record(tx, now, worker, logbook.ActComplete, e.Key, to, to, "")
+			return nil
+		}
+
+		from, _ := stepState(tx, e)
 		route, ok := lifecycle.Find(worker, e.Kind, from, to)
 		if !ok {
 			return contract.MoveNotAllowed
@@ -188,7 +239,7 @@ func (s *Service) Complete(ctx context.Context, worker, lease string, to lifecyc
 			if result != nil {
 				// A decision on a proposal carries no result, and there
 				// is nowhere to keep one.
-				return contract.Malformed
+				return contract.BadField
 			}
 			p, _ := tx.Proposal(e.Subject)
 			p.Status, p.Done = to, done
@@ -200,17 +251,22 @@ func (s *Service) Complete(ctx context.Context, worker, lease string, to lifecyc
 		}
 
 		if route.Next == "" {
-			tx.DeleteEntry(e.Subject)
+			tx.DeleteEntry(e.Key)
 		} else {
-			tx.PutEntry(logbook.Entry{
+			next := logbook.Entry{
+				Key:     e.Key,
 				Subject: e.Subject,
 				Kind:    e.Kind,
 				Worker:  route.Next,
 				Lane:    lane,
 				Arrival: tx.Next(logbook.CounterArrival),
-			})
+			}
+			if route.AfterDays > 0 {
+				next.NotBefore = now.AddDate(0, 0, route.AfterDays).UTC()
+			}
+			tx.PutEntry(next)
 		}
-		record(tx, now, worker, logbook.ActComplete, e.Subject, from, to, "")
+		record(tx, now, worker, logbook.ActComplete, e.Key, from, to, "")
 		return nil
 	})
 	if err != nil {
@@ -224,8 +280,10 @@ func (s *Service) Complete(ctx context.Context, worker, lease string, to lifecyc
 
 // Fail records that a step could not be done.
 //
-// E_TIMEOUT leaves the subject in the queue to be tried again. E_PARSE
-// stops work on it: its state is kept and it is never offered again.
+// E_TIMEOUT leaves the step in the queue to be tried again. E_PARSE
+// stops work on it: the subject keeps its state and the step is never
+// offered again, unless the owner releases it. When the step is an
+// item's own, Bellbuoy is given one incident step about it.
 // E_NEEDS_SUBTOOL has a call of its own and is refused here.
 func (s *Service) Fail(ctx context.Context, worker, lease string, code contract.Code) (*logbook.Ack, error) {
 	switch code {
@@ -233,7 +291,7 @@ func (s *Service) Fail(ctx context.Context, worker, lease string, code contract.
 	case contract.NeedsSubtool:
 		return nil, contract.UseNeedsSubtool
 	default:
-		return nil, contract.Malformed
+		return nil, contract.BadField
 	}
 	var ack logbook.Ack
 	err := s.Store.Update(ctx, func(tx logbook.Tx) error {
@@ -242,7 +300,7 @@ func (s *Service) Fail(ctx context.Context, worker, lease string, code contract.
 			return repeated(tx, worker, lease, callFail, string(code), &ack)
 		}
 		now := s.Clock()
-		state, _ := subjectState(tx, e)
+		state, _ := stepState(tx, e)
 		e.Lease, e.Expires = "", time.Time{}
 		ack = logbook.Ack{ID: e.Subject, State: state}
 		if code == contract.Parse {
@@ -253,7 +311,10 @@ func (s *Service) Fail(ctx context.Context, worker, lease string, code contract.
 		}
 		tx.PutEntry(e)
 		remember(tx, e, logbook.Finished{Lease: lease, Worker: worker, Call: callFail, Arg: string(code), Ack: ack})
-		record(tx, now, worker, logbook.ActFail, e.Subject, state, state, string(code))
+		record(tx, now, worker, logbook.ActFail, e.Key, state, state, string(code))
+		if code == contract.Parse && e.Kind == lifecycle.KindItem {
+			openIncident(tx, now, e.Subject, worker, contract.Parse, state)
+		}
 		return nil
 	})
 	if err != nil {
@@ -264,7 +325,8 @@ func (s *Service) Fail(ctx context.Context, worker, lease string, code contract.
 
 // NeedsSubtool pauses an item the worker has no rule for. The item
 // remembers the state it was in and which worker paused it, and leaves
-// the queue until that worker is replayed.
+// the queue until that worker is replayed. Bellbuoy is given one
+// incident step about it.
 func (s *Service) NeedsSubtool(ctx context.Context, worker, lease string) (*logbook.Ack, error) {
 	var ack logbook.Ack
 	err := s.Store.Update(ctx, func(tx logbook.Tx) error {
@@ -287,7 +349,8 @@ func (s *Service) NeedsSubtool(ctx context.Context, worker, lease string) (*logb
 		it.PausedFrom, it.PausedBy, it.PausedSeq = from, worker, seq
 		it.Done = logbook.Finished{Lease: lease, Worker: worker, Call: callPause, Ack: ack}
 		tx.PutItem(it)
-		tx.DeleteEntry(e.Subject)
+		tx.DeleteEntry(e.Key)
+		openIncident(tx, now, it.ID, worker, contract.NeedsSubtool, from)
 		return nil
 	})
 	if err != nil {
@@ -308,6 +371,7 @@ func Replay(tx logbook.Tx, worker string, now time.Time) int {
 		it.PausedFrom, it.PausedBy, it.PausedSeq = "", "", 0
 		tx.PutItem(it)
 		tx.PutEntry(logbook.Entry{
+			Key:     it.ID,
 			Subject: it.ID,
 			Kind:    lifecycle.KindItem,
 			Worker:  worker,
@@ -319,14 +383,61 @@ func Replay(tx logbook.Tx, worker string, now time.Time) int {
 	return len(paused)
 }
 
-var leaseForm = regexp.MustCompile(`^((?:PA|EP)-[0-9]{4,9})\.[1-9][0-9]{0,18}$`)
+// Release carries out the owner's decision to let a stopped item run
+// again. The item keeps the state it was stopped in, and its step goes
+// back to the worker it was for, at the end of the urgent lane. Only an
+// item whose step is held can be released.
+func (s *Service) Release(ctx context.Context, caller, id string) (*logbook.Ack, error) {
+	if !lifecycle.IsItemID(id) {
+		return nil, contract.BadField
+	}
+	var ack logbook.Ack
+	err := s.Store.Update(ctx, func(tx logbook.Tx) error {
+		it, ok := tx.Item(id)
+		e, queued := tx.Entry(id)
+		if !ok || !queued || !e.Held {
+			return contract.MoveNotAllowed
+		}
+		now := s.Clock()
+		e.Held, e.Lease, e.Expires = false, "", time.Time{}
+		e.Lane, e.Arrival = lifecycle.Urgent, tx.Next(logbook.CounterArrival)
+		tx.PutEntry(e)
+		it.Lane = lifecycle.Urgent
+		tx.PutItem(it)
+		ack = logbook.Ack{ID: id, State: it.State, Next: e.Worker}
+		record(tx, now, caller, logbook.ActRelease, id, it.State, it.State, "")
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &ack, nil
+}
 
-// subjectOf returns the subject a lease was issued for.
-func subjectOf(lease string) (string, bool) {
+// openIncident gives Bellbuoy one incident step about an item. An item
+// has at most one; a new incident takes the place of one not yet dealt
+// with.
+func openIncident(tx logbook.Tx, now time.Time, itemID, worker string, code contract.Code, state lifecycle.State) {
+	tx.PutEntry(logbook.Entry{
+		Key:      logbook.IncidentKey(itemID),
+		Subject:  itemID,
+		Kind:     lifecycle.KindIncident,
+		Worker:   IncidentWorker,
+		Lane:     lifecycle.Normal,
+		Arrival:  tx.Next(logbook.CounterArrival),
+		Incident: logbook.Incident{Worker: worker, Code: string(code), State: state},
+	})
+	record(tx, now, worker, logbook.ActIncident, itemID, state, state, string(code))
+}
+
+var leaseForm = regexp.MustCompile(`^((?:incident:)?` + lifecycle.ItemIDForm + `|` + lifecycle.ProposalIDForm + `)\.[1-9][0-9]{0,18}$`)
+
+// keyOf returns the queue key a lease was issued for.
+func keyOf(lease string) (string, bool) {
 	if !leaseForm.MatchString(lease) {
 		return "", false
 	}
-	return lease[:strings.IndexByte(lease, '.')], true
+	return lease[:strings.LastIndexByte(lease, '.')], true
 }
 
 // held returns the entry a worker holds under a lease. A lease is held
@@ -334,11 +445,11 @@ func subjectOf(lease string) (string, bool) {
 // expired lease nobody has taken over still counts, so a finished result
 // is not thrown away because it arrived late.
 func held(tx logbook.Tx, worker, lease string) (logbook.Entry, bool) {
-	subject, ok := subjectOf(lease)
+	key, ok := keyOf(lease)
 	if !ok {
 		return logbook.Entry{}, false
 	}
-	e, ok := tx.Entry(subject)
+	e, ok := tx.Entry(key)
 	if !ok || e.Lease != lease || e.Worker != worker {
 		return logbook.Entry{}, false
 	}
@@ -350,14 +461,18 @@ func held(tx logbook.Tx, worker, lease string) (logbook.Entry, bool) {
 // the same answer again; a worker repeats a call until it is
 // acknowledged. Anything else is refused.
 func repeated(tx logbook.Tx, worker, lease, call, arg string, ack *logbook.Ack) error {
-	subject, ok := subjectOf(lease)
+	key, ok := keyOf(lease)
 	if !ok {
 		return contract.LeaseNotHeld
 	}
 	var done logbook.Finished
-	if it, ok := tx.Item(subject); ok {
+	if id, isIncident := strings.CutPrefix(key, logbook.IncidentKey("")); isIncident {
+		if it, ok := tx.Item(id); ok {
+			done = it.IncidentDone
+		}
+	} else if it, ok := tx.Item(key); ok {
 		done = it.Done
-	} else if p, ok := tx.Proposal(subject); ok {
+	} else if p, ok := tx.Proposal(key); ok {
 		done = p.Done
 	}
 	if done.Lease != lease || done.Worker != worker || done.Call != call || done.Arg != arg {
@@ -369,9 +484,13 @@ func repeated(tx logbook.Tx, worker, lease, call, arg string, ack *logbook.Ack) 
 
 func remember(tx logbook.Tx, e logbook.Entry, done logbook.Finished) {
 	switch e.Kind {
-	case lifecycle.KindItem:
+	case lifecycle.KindItem, lifecycle.KindIncident:
 		if it, ok := tx.Item(e.Subject); ok {
-			it.Done = done
+			if e.Kind == lifecycle.KindIncident {
+				it.IncidentDone = done
+			} else {
+				it.Done = done
+			}
 			tx.PutItem(it)
 		}
 	case lifecycle.KindProposal:
@@ -382,7 +501,10 @@ func remember(tx logbook.Tx, e logbook.Entry, done logbook.Finished) {
 	}
 }
 
-func subjectState(tx logbook.Tx, e logbook.Entry) (lifecycle.State, bool) {
+// stepState returns the state a step is about: the item's state, the
+// proposal's status, or for an incident the state the item was stopped
+// in.
+func stepState(tx logbook.Tx, e logbook.Entry) (lifecycle.State, bool) {
 	switch e.Kind {
 	case lifecycle.KindItem:
 		it, ok := tx.Item(e.Subject)
@@ -390,8 +512,20 @@ func subjectState(tx logbook.Tx, e logbook.Entry) (lifecycle.State, bool) {
 	case lifecycle.KindProposal:
 		p, ok := tx.Proposal(e.Subject)
 		return p.Status, ok
+	case lifecycle.KindIncident:
+		_, ok := tx.Item(e.Subject)
+		return e.Incident.State, ok
 	}
 	return "", false
+}
+
+// mayHold reports whether the tables give this worker a step of this
+// kind on a subject in this state.
+func mayHold(worker string, e logbook.Entry, state lifecycle.State) bool {
+	if e.Kind == lifecycle.KindIncident {
+		return worker == IncidentWorker
+	}
+	return lifecycle.Holds(worker, e.Kind, state)
 }
 
 func withResult(old map[string]json.RawMessage, worker string, result json.RawMessage) map[string]json.RawMessage {

@@ -278,16 +278,25 @@ func solve(t *testing.T, st *step, now time.Time) {
 	if st.Send == nil || !unsolved.Match(st.Send) {
 		return
 	}
+	// An edit proposal's puzzle covers its target, change and reason. A
+	// candidate's covers its source, title and address.
 	var sub struct {
-		Target string `json:"target"`
-		Change string `json:"change"`
-		Reason string `json:"reason"`
+		Target  string `json:"target"`
+		Change  string `json:"change"`
+		Reason  string `json:"reason"`
+		Source  string `json:"source"`
+		Title   string `json:"title"`
+		Address string `json:"address"`
 	}
 	if err := json.Unmarshal(st.Send, &sub); err != nil {
 		t.Fatal(err)
 	}
+	parts := []string{sub.Target, sub.Change, sub.Reason}
+	if st.Path == "/v1/items" {
+		parts = []string{sub.Source, sub.Title, sub.Address}
+	}
 	day := now.UTC().Format("2006-01-02")
-	prefix := []byte("muster-pow-v1\x00" + day + "\x00" + sub.Target + "\x00" + sub.Change + "\x00" + sub.Reason + "\x00")
+	prefix := []byte("muster-pow-v1\x00" + day + "\x00" + parts[0] + "\x00" + parts[1] + "\x00" + parts[2] + "\x00")
 	for n := 0; ; n++ {
 		nonce := fmt.Sprintf("%x", n)
 		sum := sha256.Sum256(append(prefix[:len(prefix):len(prefix)], nonce...))

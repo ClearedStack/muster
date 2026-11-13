@@ -1,5 +1,5 @@
 {
-  "about": "A worker is offered only steps that are its own. Tidegauge has no steps yet and is always told there is nothing.",
+  "about": "A worker is offered only steps that are its own.",
   "seed": {
     "items": [
       {
@@ -7,11 +7,6 @@
         "state": "recorded",
         "lane": "normal",
         "next": "sextant"
-      },
-      {
-        "id": "PA-0002",
-        "state": "live",
-        "lane": "normal"
       }
     ]
   },
@@ -27,7 +22,7 @@
       "status": 204
     },
     {
-      "as": "tidegauge",
+      "as": "bellbuoy",
       "method": "POST",
       "path": "/v1/lease",
       "send": {

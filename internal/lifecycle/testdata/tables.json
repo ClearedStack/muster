@@ -3,7 +3,7 @@
     "discovered",
     "recorded",
     "observed",
-    "screened-out",
+    "screened_out",
     "scored",
     "approved",
     "building",
@@ -38,14 +38,14 @@
     },
     {
       "from": "observed",
-      "to": "screened-out"
+      "to": "screened_out"
     },
     {
       "from": "observed",
       "to": "needs_subtool"
     },
     {
-      "from": "screened-out",
+      "from": "screened_out",
       "to": "observed"
     },
     {
@@ -179,7 +179,7 @@
       "worker": "assay",
       "kind": "item",
       "from": "observed",
-      "to": "screened-out",
+      "to": "screened_out",
       "next": "countersign"
     },
     {
@@ -218,7 +218,7 @@
     {
       "worker": "countersign",
       "kind": "item",
-      "from": "screened-out",
+      "from": "screened_out",
       "to": "observed",
       "next": "assay"
     },
@@ -253,7 +253,10 @@
       "worker": "chartroom",
       "kind": "item",
       "from": "building",
-      "to": "live"
+      "to": "live",
+      "next": "tidegauge",
+      "lane": "backfill",
+      "after_days": 7
     },
     {
       "worker": "chartroom",
@@ -266,6 +269,29 @@
       "kind": "item",
       "from": "merged",
       "to": "merged"
+    },
+    {
+      "worker": "chartroom",
+      "kind": "item",
+      "from": "retired",
+      "to": "retired"
+    },
+    {
+      "worker": "tidegauge",
+      "kind": "item",
+      "from": "live",
+      "to": "live",
+      "next": "tidegauge",
+      "lane": "backfill",
+      "after_days": 7
+    },
+    {
+      "worker": "tidegauge",
+      "kind": "item",
+      "from": "live",
+      "to": "retired",
+      "next": "chartroom",
+      "lane": "urgent"
     },
     {
       "worker": "countersign",

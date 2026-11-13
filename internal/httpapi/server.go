@@ -5,6 +5,8 @@
 //	POST /v1/complete        a worker reports a finished step
 //	POST /v1/fail            a worker reports E_TIMEOUT or E_PARSE
 //	POST /v1/needs_subtool   a worker pauses an item it has no rule for
+//	POST /v1/release         Countersign passes on the owner's release of a stopped item
+//	POST /v1/items           Trawl or Conn records a candidate
 //	POST /v1/health          Shipkeeper reports component health
 //	POST /v1/edits           Conn forwards an edit proposal
 //	GET  /v1/feed            Conn subscribes to the live feed
@@ -38,10 +40,10 @@ import (
 
 // Limits.
 const (
-	MaxWorkerBody = 64 << 10 // a worker call, result included
-	MaxHealthBody = 16 << 10
-	MaxInFlight   = 64 // calls being answered at once, the feed apart
-	writeWithin   = 10 * time.Second
+	MaxBody        = 64 << 10  // any request body
+	MaxWaybillBody = 256 << 10 // Waybill's complete, which carries a specification
+	MaxInFlight    = 64        // calls being answered at once, the feed apart
+	writeWithin    = 10 * time.Second
 )
 
 // Server answers HTTP calls.
@@ -62,32 +64,39 @@ func New(s Server) *Server {
 	return &s
 }
 
-type role int
+// who says which callers may make a call.
+type who func(caller string) bool
 
-const (
-	open role = iota
-	worker
-	conn
-	shipkeeper
-)
+func only(names ...string) who {
+	return func(caller string) bool {
+		for _, n := range names {
+			if n == caller {
+				return true
+			}
+		}
+		return false
+	}
+}
 
 type call struct {
 	method string
-	role   role
+	may    who // nil for the one call that needs no token
 	stream bool
 	do     func(s *Server, w http.ResponseWriter, r *http.Request, caller string)
 }
 
 var calls = map[string]call{
-	"/healthz":          {method: http.MethodGet, role: open, do: (*Server).alive},
-	"/v1/lease":         {method: http.MethodPost, role: worker, do: (*Server).lease},
-	"/v1/heartbeat":     {method: http.MethodPost, role: worker, do: (*Server).heartbeat},
-	"/v1/complete":      {method: http.MethodPost, role: worker, do: (*Server).complete},
-	"/v1/fail":          {method: http.MethodPost, role: worker, do: (*Server).fail},
-	"/v1/needs_subtool": {method: http.MethodPost, role: worker, do: (*Server).needsSubtool},
-	"/v1/health":        {method: http.MethodPost, role: shipkeeper, do: (*Server).health},
-	"/v1/edits":         {method: http.MethodPost, role: conn, do: (*Server).edits},
-	"/v1/feed":          {method: http.MethodGet, role: conn, stream: true, do: (*Server).feed},
+	"/healthz":          {method: http.MethodGet, do: (*Server).alive},
+	"/v1/lease":         {method: http.MethodPost, may: registry.IsWorker, do: (*Server).lease},
+	"/v1/heartbeat":     {method: http.MethodPost, may: registry.IsWorker, do: (*Server).heartbeat},
+	"/v1/complete":      {method: http.MethodPost, may: registry.IsWorker, do: (*Server).complete},
+	"/v1/fail":          {method: http.MethodPost, may: registry.IsWorker, do: (*Server).fail},
+	"/v1/needs_subtool": {method: http.MethodPost, may: registry.IsWorker, do: (*Server).needsSubtool},
+	"/v1/release":       {method: http.MethodPost, may: only("countersign"), do: (*Server).release},
+	"/v1/items":         {method: http.MethodPost, may: only("trawl", registry.Conn), do: (*Server).items},
+	"/v1/health":        {method: http.MethodPost, may: only(registry.Shipkeeper), do: (*Server).health},
+	"/v1/edits":         {method: http.MethodPost, may: only(registry.Conn), do: (*Server).edits},
+	"/v1/feed":          {method: http.MethodGet, may: only(registry.Conn), stream: true, do: (*Server).feed},
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -101,7 +110,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		refuse(w, contract.WrongMethod)
 		return
 	}
-	if c.role == open {
+	if c.may == nil {
 		// The cluster's own check is always answered, so that a rush of
 		// calls is never mistaken for Muster being down.
 		c.do(s, w, r, "")
@@ -117,7 +126,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(writeWithin))
 	}
-	caller, p := s.identify(r, c.role)
+	caller, p := s.identify(r, c.may)
 	if p != nil {
 		refuse(w, p)
 		return
@@ -125,7 +134,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	c.do(s, w, r, caller)
 }
 
-func (s *Server) identify(r *http.Request, want role) (string, *contract.Problem) {
+func (s *Server) identify(r *http.Request, may who) (string, *contract.Problem) {
 	token, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
 	if !ok || token == "" {
 		return "", contract.NoCredential
@@ -140,17 +149,8 @@ func (s *Server) identify(r *http.Request, want role) (string, *contract.Problem
 	default:
 		return "", contract.IdentitySlow
 	}
-	var may bool
-	switch want {
-	case worker:
-		may = registry.IsWorker(caller)
-	case conn:
-		may = caller == registry.Conn
-	case shipkeeper:
-		may = caller == registry.Shipkeeper
-	}
-	if !may {
-		return "", contract.NotPermitted
+	if !may(caller) {
+		return "", contract.NotYourCall
 	}
 	return caller, nil
 }
@@ -167,7 +167,7 @@ type leaseRequest struct {
 
 func (s *Server) lease(w http.ResponseWriter, r *http.Request, caller string) {
 	var req leaseRequest
-	if p := read(w, r, MaxWorkerBody, &req, &req.Contract); p != nil {
+	if p := read(w, r, MaxBody, &req, &req.Contract); p != nil {
 		refuse(w, p)
 		return
 	}
@@ -192,12 +192,12 @@ type heartbeatRequest struct {
 
 func (s *Server) heartbeat(w http.ResponseWriter, r *http.Request, caller string) {
 	var req heartbeatRequest
-	if p := read(w, r, MaxWorkerBody, &req, &req.Contract); p != nil {
+	if p := read(w, r, MaxBody, &req, &req.Contract); p != nil {
 		refuse(w, p)
 		return
 	}
 	if req.Lease == "" {
-		refuse(w, contract.Malformed)
+		refuse(w, contract.MissingField)
 		return
 	}
 	ctx, cancel := s.within(r)
@@ -219,21 +219,21 @@ type completeRequest struct {
 
 func (s *Server) complete(w http.ResponseWriter, r *http.Request, caller string) {
 	var req completeRequest
-	if p := read(w, r, MaxWorkerBody, &req, &req.Contract); p != nil {
+	limit := int64(MaxBody)
+	if caller == "waybill" {
+		limit = MaxWaybillBody
+	}
+	if p := read(w, r, limit, &req, &req.Contract); p != nil {
 		refuse(w, p)
 		return
 	}
 	if req.Lease == "" || req.State == "" {
-		refuse(w, contract.Malformed)
+		refuse(w, contract.MissingField)
 		return
 	}
-	result := req.Result
-	switch {
-	case len(result) == 0 || string(result) == "null":
-		result = nil
-	case result[0] != '{':
-		// A result is a JSON object or it is left out.
-		refuse(w, contract.Malformed)
+	result, ok := object(req.Result)
+	if !ok {
+		refuse(w, contract.BadField)
 		return
 	}
 	ctx, cancel := s.within(r)
@@ -254,12 +254,12 @@ type failRequest struct {
 
 func (s *Server) fail(w http.ResponseWriter, r *http.Request, caller string) {
 	var req failRequest
-	if p := read(w, r, MaxWorkerBody, &req, &req.Contract); p != nil {
+	if p := read(w, r, MaxBody, &req, &req.Contract); p != nil {
 		refuse(w, p)
 		return
 	}
 	if req.Lease == "" || req.Code == "" {
-		refuse(w, contract.Malformed)
+		refuse(w, contract.MissingField)
 		return
 	}
 	ctx, cancel := s.within(r)
@@ -274,12 +274,12 @@ func (s *Server) fail(w http.ResponseWriter, r *http.Request, caller string) {
 
 func (s *Server) needsSubtool(w http.ResponseWriter, r *http.Request, caller string) {
 	var req heartbeatRequest
-	if p := read(w, r, MaxWorkerBody, &req, &req.Contract); p != nil {
+	if p := read(w, r, MaxBody, &req, &req.Contract); p != nil {
 		refuse(w, p)
 		return
 	}
 	if req.Lease == "" {
-		refuse(w, contract.Malformed)
+		refuse(w, contract.MissingField)
 		return
 	}
 	ctx, cancel := s.within(r)
@@ -292,6 +292,62 @@ func (s *Server) needsSubtool(w http.ResponseWriter, r *http.Request, caller str
 	answer(w, http.StatusOK, ack)
 }
 
+type releaseRequest struct {
+	Contract string `json:"contract"`
+	ID       string `json:"id"`
+}
+
+func (s *Server) release(w http.ResponseWriter, r *http.Request, caller string) {
+	var req releaseRequest
+	if p := read(w, r, MaxBody, &req, &req.Contract); p != nil {
+		refuse(w, p)
+		return
+	}
+	if req.ID == "" {
+		refuse(w, contract.MissingField)
+		return
+	}
+	ctx, cancel := s.within(r)
+	defer cancel()
+	ack, err := s.Queue.Release(ctx, caller, req.ID)
+	if err != nil {
+		refuse(w, problemOf(err))
+		return
+	}
+	answer(w, http.StatusOK, ack)
+}
+
+type itemRequest struct {
+	Contract string `json:"contract"`
+	intake.Candidate
+}
+
+func (s *Server) items(w http.ResponseWriter, r *http.Request, caller string) {
+	var req itemRequest
+	if p := read(w, r, MaxBody, &req, &req.Contract); p != nil {
+		refuse(w, p)
+		return
+	}
+	result, ok := object(req.Result)
+	if !ok {
+		refuse(w, contract.BadField)
+		return
+	}
+	req.Result = result
+	ctx, cancel := s.within(r)
+	defer cancel()
+	recorded, err := s.Intake.Record(ctx, caller, req.Candidate)
+	if err != nil {
+		refuse(w, problemOf(err))
+		return
+	}
+	status := http.StatusCreated
+	if recorded.Duplicate {
+		status = http.StatusOK
+	}
+	answer(w, status, recorded)
+}
+
 type healthRequest struct {
 	Contract string          `json:"contract"`
 	Reports  []health.Report `json:"reports"`
@@ -299,7 +355,7 @@ type healthRequest struct {
 
 func (s *Server) health(w http.ResponseWriter, r *http.Request, _ string) {
 	var req healthRequest
-	if p := read(w, r, MaxHealthBody, &req, &req.Contract); p != nil {
+	if p := read(w, r, MaxBody, &req, &req.Contract); p != nil {
 		refuse(w, p)
 		return
 	}
@@ -320,13 +376,14 @@ type editRequest struct {
 
 func (s *Server) edits(w http.ResponseWriter, r *http.Request, _ string) {
 	var req editRequest
-	if p := read(w, r, intake.MaxBytes, &req, &req.Contract); p != nil {
+	size, p := readSized(w, r, MaxBody, &req, &req.Contract)
+	if p != nil {
 		refuse(w, p)
 		return
 	}
 	ctx, cancel := s.within(r)
 	defer cancel()
-	receipt, err := s.Intake.Receive(ctx, req.Submission)
+	receipt, err := s.Intake.Receive(ctx, req.Submission, size)
 	if err != nil {
 		refuse(w, problemOf(err))
 		return
@@ -403,37 +460,65 @@ func (s *Server) within(r *http.Request) (context.Context, context.CancelFunc) {
 
 // read decodes a request body into dst and checks the contract version,
 // which every body carries. It refuses a body that is too large, is not
-// JSON, has a field the call does not define, or holds anything after
-// its one value.
+// one JSON value, has a field the call does not define, or has a field
+// of the wrong type.
 func read(w http.ResponseWriter, r *http.Request, limit int64, dst any, version *string) *contract.Problem {
+	_, p := readSized(w, r, limit, dst, version)
+	return p
+}
+
+// readSized is read, and also returns the weight of the body as sent.
+func readSized(w http.ResponseWriter, r *http.Request, limit int64, dst any, version *string) (int, *contract.Problem) {
 	kind, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	if err != nil || kind != "application/json" {
-		return contract.WrongType
+		return 0, contract.WrongType
 	}
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, limit))
 	if err != nil {
 		var tooBig *http.MaxBytesError
 		if errors.As(err, &tooBig) {
-			return contract.TooLarge
+			return 0, contract.TooLarge
 		}
-		return contract.Unreadable
+		return 0, contract.NotJSON
 	}
 	dec := json.NewDecoder(bytes.NewReader(body))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(dst); err != nil {
-		return contract.Unreadable
+		var wrongType *json.UnmarshalTypeError
+		switch {
+		case errors.As(err, &wrongType):
+			// The request is JSON, and something in it is not the kind
+			// of value the call takes there.
+			return 0, contract.BadField
+		case strings.HasPrefix(err.Error(), "json: unknown field "):
+			return 0, contract.UnknownField
+		default:
+			return 0, contract.NotJSON
+		}
 	}
 	if _, err := dec.Token(); err != io.EOF {
-		return contract.Unreadable
+		return 0, contract.NotJSON
 	}
 	switch *version {
 	case contract.Version:
-		return nil
+		return len(body), nil
 	case "":
-		return contract.Malformed
+		return 0, contract.MissingField
 	default:
-		return contract.UnknownVersion
+		return 0, contract.UnknownContract
 	}
+}
+
+// object reads an optional JSON object. It returns nil for one that was
+// left out, and false for a value that is not an object.
+func object(raw json.RawMessage) (json.RawMessage, bool) {
+	switch {
+	case len(raw) == 0 || string(raw) == "null":
+		return nil, true
+	case raw[0] != '{':
+		return nil, false
+	}
+	return raw, true
 }
 
 // problemOf turns any error into one of the fixed refusals. An error
@@ -452,18 +537,20 @@ func problemOf(err error) *contract.Problem {
 
 type refusal struct {
 	Error  contract.Code `json:"error"`
+	Cause  string        `json:"cause"`
 	Reason string        `json:"reason"`
 }
 
 func refuse(w http.ResponseWriter, p *contract.Problem) {
-	answer(w, p.Status, refusal{Error: p.Code, Reason: p.Reason})
+	answer(w, p.Status, refusal{Error: p.Code, Cause: p.Cause, Reason: p.Reason})
 }
 
 func answer(w http.ResponseWriter, status int, v any) {
 	body, err := json.Marshal(v)
 	if err != nil {
 		status = http.StatusInternalServerError
-		body, _ = json.Marshal(refusal{Error: contract.Unexpected.Code, Reason: contract.Unexpected.Reason})
+		p := contract.Unexpected
+		body, _ = json.Marshal(refusal{Error: p.Code, Cause: p.Cause, Reason: p.Reason})
 	}
 	h := w.Header()
 	h.Set("Content-Type", "application/json")

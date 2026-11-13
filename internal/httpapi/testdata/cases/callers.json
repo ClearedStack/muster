@@ -11,6 +11,7 @@
       "status": 401,
       "want": {
         "error": "E_PARSE",
+        "cause": "no_credential",
         "reason": "no valid credential was presented"
       }
     },
@@ -25,6 +26,7 @@
       "status": 401,
       "want": {
         "error": "E_PARSE",
+        "cause": "no_credential",
         "reason": "no valid credential was presented"
       }
     },
@@ -39,6 +41,7 @@
       "status": 403,
       "want": {
         "error": "E_PARSE",
+        "cause": "not_your_call",
         "reason": "this caller may not make this call"
       }
     },
@@ -52,6 +55,7 @@
       "status": 403,
       "want": {
         "error": "E_PARSE",
+        "cause": "not_your_call",
         "reason": "this caller may not make this call"
       }
     },
@@ -67,6 +71,7 @@
       "status": 403,
       "want": {
         "error": "E_PARSE",
+        "cause": "not_your_call",
         "reason": "this caller may not make this call"
       }
     },
@@ -81,6 +86,7 @@
       "status": 403,
       "want": {
         "error": "E_PARSE",
+        "cause": "not_your_call",
         "reason": "this caller may not make this call"
       }
     },
@@ -95,6 +101,7 @@
       "status": 403,
       "want": {
         "error": "E_PARSE",
+        "cause": "not_your_call",
         "reason": "this caller may not make this call"
       }
     },
@@ -108,6 +115,65 @@
       "status": 403,
       "want": {
         "error": "E_PARSE",
+        "cause": "not_your_call",
+        "reason": "this caller may not make this call"
+      }
+    },
+    {
+      "note": "only Trawl and Conn may record a candidate",
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/items",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 403,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "not_your_call",
+        "reason": "this caller may not make this call"
+      }
+    },
+    {
+      "as": "shipkeeper",
+      "method": "POST",
+      "path": "/v1/items",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 403,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "not_your_call",
+        "reason": "this caller may not make this call"
+      }
+    },
+    {
+      "note": "only Countersign may release a stopped item",
+      "as": "conn",
+      "method": "POST",
+      "path": "/v1/release",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 403,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "not_your_call",
+        "reason": "this caller may not make this call"
+      }
+    },
+    {
+      "as": "trawl",
+      "method": "POST",
+      "path": "/v1/release",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 403,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "not_your_call",
         "reason": "this caller may not make this call"
       }
     },
@@ -119,6 +185,7 @@
       "status": 403,
       "want": {
         "error": "E_PARSE",
+        "cause": "not_your_call",
         "reason": "this caller may not make this call"
       }
     },
@@ -128,6 +195,7 @@
       "status": 401,
       "want": {
         "error": "E_PARSE",
+        "cause": "no_credential",
         "reason": "no valid credential was presented"
       }
     },
@@ -139,6 +207,7 @@
       "status": 405,
       "want": {
         "error": "E_PARSE",
+        "cause": "wrong_method",
         "reason": "this call does not accept that method"
       }
     },
@@ -146,13 +215,14 @@
       "note": "no such call",
       "as": "sextant",
       "method": "POST",
-      "path": "/v1/items",
+      "path": "/v1/made-up",
       "send": {
         "contract": "v1"
       },
       "status": 404,
       "want": {
         "error": "E_PARSE",
+        "cause": "no_such_call",
         "reason": "no such call"
       }
     },
@@ -162,6 +232,7 @@
       "status": 404,
       "want": {
         "error": "E_PARSE",
+        "cause": "no_such_call",
         "reason": "no such call"
       }
     },

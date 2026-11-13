@@ -32,6 +32,7 @@ func refusalOf(t *testing.T, rec *httptest.ResponseRecorder) *contract.Problem {
 	t.Helper()
 	var body struct {
 		Error  contract.Code `json:"error"`
+		Cause  string        `json:"cause"`
 		Reason string        `json:"reason"`
 	}
 	dec := json.NewDecoder(rec.Body)
@@ -40,28 +41,53 @@ func refusalOf(t *testing.T, rec *httptest.ResponseRecorder) *contract.Problem {
 		t.Fatalf("not a refusal: %v", err)
 	}
 	for _, p := range contract.All() {
-		if p.Status == rec.Code && p.Code == body.Error && p.Reason == body.Reason {
+		if p.Status == rec.Code && p.Code == body.Error && p.Cause == body.Cause && p.Reason == body.Reason {
 			return p
 		}
 	}
-	t.Fatalf("%d %s %q is not one of the fixed refusals", rec.Code, body.Error, body.Reason)
+	t.Fatalf("%d %s %s %q is not one of the fixed refusals", rec.Code, body.Error, body.Cause, body.Reason)
 	return nil
 }
 
-func TestWorkerCallSizeLimit(t *testing.T) {
-	s := newStack(t, oneItem())
+// Any body may weigh 64 KiB. Waybill's complete, which carries a whole
+// specification, may weigh 256 KiB.
+func TestBodySizeLimits(t *testing.T) {
+	seed := &memory.Seed{Items: []memory.SeedItem{
+		{ID: "PA-0001", State: "recorded", Lane: "normal", Next: "sextant"},
+		{ID: "PA-0002", State: "approved", Lane: "normal", Next: "waybill"},
+	}}
+	s := newStack(t, seed)
 	s.do(t, post("/v1/lease", "sextant", map[string]string{"contract": "v1"}))
-	call := func(pad int) *httptest.ResponseRecorder {
-		return s.do(t, post("/v1/complete", "sextant", map[string]any{
-			"contract": "v1", "lease": "PA-0001.1", "state": "observed",
+	s.do(t, post("/v1/lease", "waybill", map[string]string{"contract": "v1"}))
+	complete := func(as, lease, state string, pad int) *httptest.ResponseRecorder {
+		return s.do(t, post("/v1/complete", as, map[string]any{
+			"contract": "v1", "lease": lease, "state": state,
 			"result": map[string]string{"text": strings.Repeat("x", pad)},
 		}))
 	}
-	if p := refusalOf(t, call(httpapi.MaxWorkerBody)); p != contract.TooLarge {
-		t.Errorf("an oversized call: %v", p)
+	if p := refusalOf(t, complete("sextant", "PA-0001.1", "observed", httpapi.MaxBody)); p != contract.TooLarge {
+		t.Errorf("an oversized call from Sextant: %v", p)
 	}
-	if rec := call(httpapi.MaxWorkerBody - 200); rec.Code != http.StatusOK {
-		t.Errorf("a call just inside the limit: %d %s", rec.Code, rec.Body)
+	if rec := complete("sextant", "PA-0001.1", "observed", httpapi.MaxBody-200); rec.Code != http.StatusOK {
+		t.Errorf("a call from Sextant just inside the limit: %d %s", rec.Code, rec.Body)
+	}
+	if p := refusalOf(t, complete("waybill", "PA-0002.2", "approved", httpapi.MaxWaybillBody)); p != contract.TooLarge {
+		t.Errorf("an oversized call from Waybill: %v", p)
+	}
+	if rec := complete("waybill", "PA-0002.2", "approved", httpapi.MaxWaybillBody-200); rec.Code != http.StatusOK {
+		t.Errorf("a call from Waybill just inside its limit: %d %s", rec.Code, rec.Body)
+	}
+	// The larger limit is for Waybill's complete and nothing else.
+	big := map[string]any{"contract": "v1", "pad": strings.Repeat("x", httpapi.MaxBody)}
+	for _, path := range []string{"/v1/lease", "/v1/heartbeat", "/v1/fail", "/v1/needs_subtool"} {
+		if p := refusalOf(t, s.do(t, post(path, "waybill", big))); p != contract.TooLarge {
+			t.Errorf("%s from Waybill: %v", path, p)
+		}
+	}
+	for path, as := range map[string]string{"/v1/items": "trawl", "/v1/release": "countersign", "/v1/health": "shipkeeper", "/v1/edits": "conn"} {
+		if p := refusalOf(t, s.do(t, post(path, as, big))); p != contract.TooLarge {
+			t.Errorf("%s: %v", path, p)
+		}
 	}
 }
 
@@ -88,6 +114,8 @@ func TestSlowStoreIsATimeout(t *testing.T) {
 		post("/v1/fail", "sextant", map[string]string{"contract": "v1", "lease": "PA-0001.1", "code": "E_PARSE"}),
 		post("/v1/needs_subtool", "sextant", map[string]string{"contract": "v1", "lease": "PA-0001.1"}),
 		post("/v1/health", "shipkeeper", map[string]any{"contract": "v1", "reports": []map[string]string{{"component": "sextant", "state": "healthy"}}}),
+		post("/v1/release", "countersign", map[string]string{"contract": "v1", "id": "PA-0001"}),
+		post("/v1/items", "trawl", map[string]string{"contract": "v1", "source": "sam-gov", "title": "A made-up title", "address": "https://example.org/made-up"}),
 		example.Steps[0],
 		{Method: http.MethodGet, Path: "/v1/feed", As: "conn"},
 	}
@@ -147,14 +175,17 @@ func TestSourceAddressIsNeverKept(t *testing.T) {
 // no other field. This throws a spread of bad calls at every path.
 func TestOnlyFixedRefusals(t *testing.T) {
 	s := newStack(t, oneItem())
-	paths := []string{"/v1/lease", "/v1/heartbeat", "/v1/complete", "/v1/fail", "/v1/needs_subtool", "/v1/health", "/v1/edits", "/v1/feed", "/healthz", "/v1/", "/v1/lease/", "/made-up"}
+	paths := []string{"/v1/lease", "/v1/heartbeat", "/v1/complete", "/v1/fail", "/v1/needs_subtool", "/v1/release", "/v1/items", "/v1/health", "/v1/edits", "/v1/feed", "/healthz", "/v1/", "/v1/lease/", "/made-up"}
 	bodies := []string{``, `{}`, `[]`, `null`, `"v1"`, `{"contract":"v1"}`, `{"contract":"v9"}`, `{"contract":1}`,
 		`{"contract":"v1","lease":"PA-0001.1","state":"observed","code":"E_PARSE"}`,
 		`{"contract":"v1","lease":"../../made-up","state":"\u0000"}`,
 		`{"contract":"v1","reports":[{"component":"sextant","state":"healthy","digest":"made-up"}]}`,
 		`{"contract":"v1","target":"x","change":"y","reason":"","pow":"z","honeypot":"","source":"made-up"}`,
+		`{"contract":"v1","id":"PA-0001"}`, `{"contract":"v1","id":"made-up"}`,
+		`{"contract":"v1","source":"site-form","title":"t","address":"a","pow":"z","visitor":"made-up"}`,
+		`{"contract":"v1","source":"made-up","title":"t","address":"a b"}`,
 		`{"contract":"v1"`, "\x00\x01\x02", strings.Repeat("[", 5000)}
-	callers := []string{"", "sextant", "conn", "shipkeeper", "tidegauge"}
+	callers := []string{"", "sextant", "conn", "shipkeeper", "tidegauge", "trawl", "countersign"}
 	for _, path := range paths {
 		for _, method := range []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete} {
 			if path == "/v1/feed" && method == http.MethodGet {

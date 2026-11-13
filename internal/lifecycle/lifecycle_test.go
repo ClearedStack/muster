@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"os"
+	"regexp"
 	"testing"
 
 	"github.com/ClearedStack/muster/internal/registry"
@@ -96,6 +97,15 @@ func TestEndStates(t *testing.T) {
 			}
 		}
 	}
+	// Every state is spelled in lower case with underscores.
+	spelled := regexp.MustCompile(`^[a-z]+(_[a-z]+)*$`)
+	for _, k := range []Kind{KindItem, KindProposal} {
+		for _, s := range States(k) {
+			if !spelled.MatchString(string(s)) {
+				t.Errorf("the state %q is not spelled in lower case with underscores", s)
+			}
+		}
+	}
 }
 
 func TestPausable(t *testing.T) {
@@ -144,6 +154,39 @@ func TestRoutesAgreeWithTheOtherTables(t *testing.T) {
 			t.Errorf("route %+v is listed twice", r)
 		}
 		seen[k] = true
+	}
+}
+
+func TestIdentifierForms(t *testing.T) {
+	good := []string{"PA-0000", "PA-0001", "PA-9999", "PA-10000", "PA-999999999"}
+	bad := []string{"", "PA-", "PA-1", "PA-001", "PA-00001", "PA-01234", "PA-1000000000", "pa-0001", "PA-00a1", " PA-0001", "PA-0001 ", "EP-0001", "PA-0001\n"}
+	for _, id := range good {
+		if !IsItemID(id) {
+			t.Errorf("%q is refused as an item identifier", id)
+		}
+		if p := "EP" + id[2:]; !IsProposalID(p) {
+			t.Errorf("%q is refused as a proposal identifier", p)
+		}
+	}
+	for _, id := range bad {
+		if IsItemID(id) {
+			t.Errorf("%q is accepted as an item identifier", id)
+		}
+	}
+	if IsProposalID("PA-0001") {
+		t.Error("an item identifier is accepted as a proposal identifier")
+	}
+	// The identifiers Muster writes are ones it accepts.
+	for _, n := range []uint64{1, 42, 9999, 10000, 123456, MaxID} {
+		if id := ItemID(n); !IsItemID(id) {
+			t.Errorf("item %d is written %q", n, id)
+		}
+		if id := ProposalID(n); !IsProposalID(id) {
+			t.Errorf("proposal %d is written %q", n, id)
+		}
+	}
+	if ItemID(7) != "PA-0007" || ItemID(10000) != "PA-10000" || ProposalID(7) != "EP-0007" {
+		t.Error("an identifier is not written as expected")
 	}
 }
 

@@ -1,0 +1,238 @@
+{
+  "about": "Every live item comes to Tidegauge for a check every seven days, in the backfill lane. A check that finds nothing leaves the item live and sets the next check. A check that finds the rule repealed retires the item, and Chartroom takes it from there in the urgent lane.",
+  "seed": {
+    "items": [
+      {
+        "id": "PA-0001",
+        "state": "building",
+        "lane": "normal",
+        "next": "chartroom"
+      }
+    ]
+  },
+  "steps": [
+    {
+      "as": "chartroom",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0001.1",
+        "kind": "item",
+        "id": "PA-0001",
+        "state": "building",
+        "lane": "normal",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z"
+      }
+    },
+    {
+      "as": "chartroom",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0001.1",
+        "state": "live"
+      },
+      "status": 200,
+      "want": {
+        "id": "PA-0001",
+        "state": "live",
+        "next": "tidegauge"
+      }
+    },
+    {
+      "note": "the check is not due yet",
+      "as": "tidegauge",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 204
+    },
+    {
+      "note": "one second short of seven days",
+      "wait": "167h59m59s",
+      "as": "tidegauge",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 204
+    },
+    {
+      "note": "seven days after it went live",
+      "wait": "1s",
+      "as": "tidegauge",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0001.2",
+        "kind": "item",
+        "id": "PA-0001",
+        "state": "live",
+        "lane": "backfill",
+        "attempt": 1,
+        "expires": "2026-01-12T09:01:00Z"
+      }
+    },
+    {
+      "note": "nothing changed: the next check is seven days from now",
+      "as": "tidegauge",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0001.2",
+        "state": "live",
+        "result": {
+          "checked": "made-up source"
+        }
+      },
+      "status": 200,
+      "want": {
+        "id": "PA-0001",
+        "state": "live",
+        "next": "tidegauge"
+      }
+    },
+    {
+      "as": "tidegauge",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 204
+    },
+    {
+      "note": "seven days after the last check",
+      "wait": "168h",
+      "as": "tidegauge",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0001.3",
+        "kind": "item",
+        "id": "PA-0001",
+        "state": "live",
+        "lane": "backfill",
+        "attempt": 1,
+        "expires": "2026-01-19T09:01:00Z",
+        "results": {
+          "tidegauge": {
+            "checked": "made-up source"
+          }
+        }
+      }
+    },
+    {
+      "note": "the state table allows live to building, and no queue step is defined for it yet",
+      "as": "tidegauge",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0001.3",
+        "state": "building"
+      },
+      "status": 409,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "move_not_allowed",
+        "reason": "that move is not allowed"
+      }
+    },
+    {
+      "note": "the rule was repealed",
+      "as": "tidegauge",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0001.3",
+        "state": "retired"
+      },
+      "status": 200,
+      "want": {
+        "id": "PA-0001",
+        "state": "retired",
+        "next": "chartroom"
+      }
+    },
+    {
+      "note": "in the urgent lane",
+      "as": "chartroom",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0001.4",
+        "kind": "item",
+        "id": "PA-0001",
+        "state": "retired",
+        "lane": "urgent",
+        "attempt": 1,
+        "expires": "2026-01-19T09:01:00Z",
+        "results": {
+          "tidegauge": {
+            "checked": "made-up source"
+          }
+        }
+      }
+    },
+    {
+      "note": "no step follows, and no more checks",
+      "as": "chartroom",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0001.4",
+        "state": "retired"
+      },
+      "status": 200,
+      "want": {
+        "id": "PA-0001",
+        "state": "retired"
+      }
+    },
+    {
+      "wait": "720h",
+      "as": "tidegauge",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 204
+    },
+    {
+      "note": "nothing is left to check",
+      "as": "tidegauge",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 204
+    }
+  ]
+}

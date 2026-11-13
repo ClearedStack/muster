@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"regexp"
+	"strconv"
 
 	"github.com/ClearedStack/muster/internal/lifecycle"
 	"github.com/ClearedStack/muster/internal/logbook"
@@ -21,15 +21,15 @@ type Seed struct {
 }
 
 // SeedItem is one item. Next names the worker whose step is waiting. It
-// may be left out, and then the item is in no queue.
+// may be left out, and then the item is in no queue, with one exception:
+// every live item gets a Tidegauge check, so a live item with no Next is
+// given one in the backfill lane, due at once.
 type SeedItem struct {
 	ID    string          `json:"id"`
 	State lifecycle.State `json:"state"`
 	Lane  lifecycle.Lane  `json:"lane"`
 	Next  string          `json:"next,omitempty"`
 }
-
-var itemID = regexp.MustCompile(`^PA-[0-9]{4,9}$`)
 
 // ParseSeed reads a seed and refuses anything it does not recognise.
 func ParseSeed(data []byte) (Seed, error) {
@@ -49,9 +49,13 @@ func ParseSeed(data []byte) (Seed, error) {
 // queue in the order they are listed.
 func (s *Store) Load(seed Seed) error {
 	return s.Update(context.Background(), func(tx logbook.Tx) error {
+		var highest uint64
 		for i, it := range seed.Items {
-			if !itemID.MatchString(it.ID) {
+			if !lifecycle.IsItemID(it.ID) {
 				return fmt.Errorf("seed item %d: the identifier is not of the form PA-0001", i+1)
+			}
+			if n, _ := strconv.ParseUint(it.ID[len("PA-"):], 10, 64); n > highest {
+				highest = n
 			}
 			if _, dup := tx.Item(it.ID); dup {
 				return fmt.Errorf("seed item %s: listed twice", it.ID)
@@ -65,20 +69,31 @@ func (s *Store) Load(seed Seed) error {
 			if lifecycle.Rank(it.Lane) < 0 {
 				return fmt.Errorf("seed item %s: unknown lane", it.ID)
 			}
-			tx.PutItem(logbook.Item{ID: it.ID, State: it.State, Lane: it.Lane})
-			if it.Next == "" {
+			next, lane := it.Next, it.Lane
+			if next == "" && it.State == lifecycle.Live {
+				next, lane = "tidegauge", lifecycle.Backfill
+			}
+			tx.PutItem(logbook.Item{ID: it.ID, State: it.State, Lane: lane})
+			if next == "" {
 				continue
 			}
-			if !lifecycle.Holds(it.Next, lifecycle.KindItem, it.State) {
+			if !lifecycle.Holds(next, lifecycle.KindItem, it.State) {
 				return fmt.Errorf("seed item %s: that worker has no step for an item in that state", it.ID)
 			}
 			tx.PutEntry(logbook.Entry{
+				Key:     it.ID,
 				Subject: it.ID,
 				Kind:    lifecycle.KindItem,
-				Worker:  it.Next,
-				Lane:    it.Lane,
+				Worker:  next,
+				Lane:    lane,
 				Arrival: tx.Next(logbook.CounterArrival),
 			})
+		}
+		// New items are numbered after the highest one in the seed.
+		t := tx.(*txn)
+		if old := s.counters[logbook.CounterItem]; highest > old {
+			t.undo = append(t.undo, func() { s.counters[logbook.CounterItem] = old })
+			s.counters[logbook.CounterItem] = highest
 		}
 		return nil
 	})

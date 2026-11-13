@@ -32,7 +32,8 @@
       "status": 200,
       "want": {
         "received": 4,
-        "replayed": 0
+        "replayed": 0,
+        "live": 0
       }
     },
     {
@@ -53,7 +54,8 @@
       "status": 400,
       "want": {
         "error": "E_PARSE",
-        "reason": "the request could not be read"
+        "cause": "unknown_field",
+        "reason": "the request has a field this call does not define"
       }
     },
     {
@@ -73,7 +75,8 @@
       "status": 400,
       "want": {
         "error": "E_PARSE",
-        "reason": "the request could not be read"
+        "cause": "unknown_field",
+        "reason": "the request has a field this call does not define"
       }
     },
     {
@@ -93,7 +96,8 @@
       "status": 400,
       "want": {
         "error": "E_PARSE",
-        "reason": "a required field is missing or malformed"
+        "cause": "bad_field",
+        "reason": "a field does not have the form this call requires"
       }
     },
     {
@@ -113,6 +117,7 @@
       "status": 422,
       "want": {
         "error": "E_NEEDS_SUBTOOL",
+        "cause": "unknown_value",
         "reason": "this health state is not known"
       }
     },
@@ -134,7 +139,8 @@
       "status": 400,
       "want": {
         "error": "E_PARSE",
-        "reason": "a required field is missing or malformed"
+        "cause": "bad_field",
+        "reason": "a field does not have the form this call requires"
       }
     },
     {
@@ -155,7 +161,8 @@
       "status": 400,
       "want": {
         "error": "E_PARSE",
-        "reason": "a required field is missing or malformed"
+        "cause": "bad_field",
+        "reason": "a field does not have the form this call requires"
       }
     },
     {
@@ -176,10 +183,11 @@
           }
         ]
       },
-      "status": 400,
+      "status": 409,
       "want": {
         "error": "E_PARSE",
-        "reason": "a required field is missing or malformed"
+        "cause": "duplicate",
+        "reason": "the same component is reported twice in one batch"
       }
     },
     {
@@ -198,7 +206,8 @@
       "status": 400,
       "want": {
         "error": "E_PARSE",
-        "reason": "a required field is missing or malformed"
+        "cause": "missing_field",
+        "reason": "a required field is missing"
       }
     },
     {
@@ -213,7 +222,8 @@
       "status": 400,
       "want": {
         "error": "E_PARSE",
-        "reason": "a required field is missing or malformed"
+        "cause": "missing_field",
+        "reason": "a required field is missing"
       }
     },
     {
@@ -237,7 +247,8 @@
       "status": 400,
       "want": {
         "error": "E_PARSE",
-        "reason": "a required field is missing or malformed"
+        "cause": "bad_field",
+        "reason": "a field does not have the form this call requires"
       }
     }
   ]

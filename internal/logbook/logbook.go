@@ -47,15 +47,25 @@ type Tx interface {
 	Proposal(id string) (Proposal, bool)
 	PutProposal(Proposal)
 
-	// Entry returns the queue entry for a subject. A subject has at most
-	// one: its next step.
-	Entry(subject string) (Entry, bool)
+	// ItemAt returns the item recorded for an address key, if there is
+	// one. PutItemAt records it. The key is a hash of the address.
+	ItemAt(addressKey string) (string, bool)
+	PutItemAt(addressKey, id string)
+
+	// Building lists the proposals for one repository whose status is
+	// building, in the order they were received.
+	Building(repository string) []Proposal
+
+	// Entry returns the queue entry with this key. An item or a proposal
+	// has at most one step of its own, keyed by its identifier. An item
+	// may also have one incident step, keyed by IncidentKey.
+	Entry(key string) (Entry, bool)
 	PutEntry(Entry)
-	DeleteEntry(subject string)
+	DeleteEntry(key string)
 	// NextEntry returns the entry a worker should be offered now: among
-	// that worker's entries that are not set aside and not under a live
-	// lease, the one in the earliest lane, and within the lane the one
-	// that arrived first.
+	// that worker's entries that are due, not set aside and not under a
+	// live lease, the one in the earliest lane, and within the lane the
+	// one that arrived first.
 	NextEntry(worker string, now time.Time) (Entry, bool)
 
 	Component(slug string) (Component, bool)
@@ -83,6 +93,7 @@ type Tx interface {
 const (
 	CounterArrival  = "arrival"
 	CounterLease    = "lease"
+	CounterItem     = "item"
 	CounterProposal = "proposal"
 	CounterLedger   = "ledger"
 )
@@ -93,6 +104,11 @@ type Item struct {
 	State lifecycle.State
 	Lane  lifecycle.Lane
 
+	// Where the item was found, as it was recorded.
+	Source  string
+	Title   string
+	Address string
+
 	// Set while the item is in needs_subtool.
 	PausedFrom lifecycle.State
 	PausedBy   string
@@ -102,7 +118,10 @@ type Item struct {
 	// item, by worker. A stored map is never changed in place.
 	Results map[string]json.RawMessage
 
-	Done Finished
+	// Done remembers how the last lease on the item's own step ended,
+	// and IncidentDone how the last lease on its incident step ended.
+	Done         Finished
+	IncidentDone Finished
 }
 
 // Proposal is one edit proposal. It never holds the address it came from,
@@ -121,15 +140,20 @@ type Proposal struct {
 	Done Finished
 }
 
-// Entry is one queue step: the next thing to be done to a subject, and by
-// which worker.
+// Entry is one queue step: the next thing to be done about a subject,
+// and by which worker.
 type Entry struct {
-	Subject string
+	Key     string // what the queue knows the step by
+	Subject string // the item or proposal it is about
 	Kind    lifecycle.Kind
 	Worker  string
 	Lane    lifecycle.Lane
 	Arrival uint64 // order of arrival; lower is earlier
 	Attempt int    // how many times it has been leased
+
+	// NotBefore, when set, is the moment the step becomes due. Until
+	// then it is not offered and is not counted as waiting.
+	NotBefore time.Time
 
 	Lease   string    // empty while waiting
 	Expires time.Time // when the lease stops protecting the entry
@@ -137,7 +161,22 @@ type Entry struct {
 	// Held is set when work on the subject was stopped. A held entry is
 	// never offered.
 	Held bool
+
+	// Incident is what an incident step reports. It is empty for any
+	// other kind of step.
+	Incident Incident
 }
+
+// Incident says that a worker stopped or paused an item: which worker,
+// with which error code, and the state the item was in.
+type Incident struct {
+	Worker string
+	Code   string
+	State  lifecycle.State
+}
+
+// IncidentKey is the queue key of the incident step of an item.
+func IncidentKey(itemID string) string { return "incident:" + itemID }
 
 // Finished remembers how the last lease on a subject ended, so that a
 // worker repeating a call it was never told had succeeded gets the same
@@ -197,4 +236,9 @@ const (
 	ActReplay   = "replay"
 	ActPropose  = "propose"
 	ActSetAside = "set_aside"
+	ActRecord   = "record"
+	ActSighting = "sighting"
+	ActIncident = "incident"
+	ActRelease  = "release"
+	ActLive     = "live"
 )

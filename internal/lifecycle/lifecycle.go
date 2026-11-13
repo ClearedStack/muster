@@ -5,6 +5,11 @@
 // Everything here is data. Nothing is decided at run time.
 package lifecycle
 
+import (
+	"fmt"
+	"regexp"
+)
+
 // State is the state of an item or the status of an edit proposal.
 type State string
 
@@ -14,6 +19,9 @@ type Kind string
 const (
 	KindItem     Kind = "item"
 	KindProposal Kind = "proposal"
+	// KindIncident is a step that tells Bellbuoy an item was stopped or
+	// paused. It is about an item and changes no state.
+	KindIncident Kind = "incident"
 )
 
 // The fourteen item states.
@@ -21,7 +29,7 @@ const (
 	Discovered   State = "discovered"
 	Recorded     State = "recorded"
 	Observed     State = "observed"
-	ScreenedOut  State = "screened-out"
+	ScreenedOut  State = "screened_out"
 	Scored       State = "scored"
 	Approved     State = "approved"
 	Building     State = "building"
@@ -87,6 +95,33 @@ var itemMoves = []Move{
 }
 
 var proposalStates = []State{PendingApproval, Approved, Declined, Building, Live}
+
+// The forms an identifier takes: four digits, or five to nine with no
+// leading zero.
+const (
+	ItemIDForm     = `PA-(?:[0-9]{4}|[1-9][0-9]{4,8})`
+	ProposalIDForm = `EP-(?:[0-9]{4}|[1-9][0-9]{4,8})`
+)
+
+var (
+	itemID     = regexp.MustCompile(`^` + ItemIDForm + `$`)
+	proposalID = regexp.MustCompile(`^` + ProposalIDForm + `$`)
+)
+
+// IsItemID reports whether id has the form of an item identifier.
+func IsItemID(id string) bool { return itemID.MatchString(id) }
+
+// IsProposalID reports whether id has the form of a proposal identifier.
+func IsProposalID(id string) bool { return proposalID.MatchString(id) }
+
+// MaxID is the largest number an identifier can carry.
+const MaxID = 999999999
+
+// ItemID writes the identifier of the item with this number.
+func ItemID(n uint64) string { return fmt.Sprintf("PA-%04d", n) }
+
+// ProposalID writes the identifier of the proposal with this number.
+func ProposalID(n uint64) string { return fmt.Sprintf("EP-%04d", n) }
 
 var proposalMoves = []Move{
 	{PendingApproval, Approved},

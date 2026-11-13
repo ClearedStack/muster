@@ -1,0 +1,263 @@
+{
+  "about": "The owner can let a stopped item run again. It keeps the state it was stopped in and goes to the end of the urgent lane, for the worker it was stopped at.",
+  "seed": {
+    "items": [
+      {
+        "id": "PA-0001",
+        "state": "recorded",
+        "lane": "backfill",
+        "next": "sextant"
+      },
+      {
+        "id": "PA-0002",
+        "state": "recorded",
+        "lane": "normal",
+        "next": "sextant"
+      }
+    ]
+  },
+  "steps": [
+    {
+      "note": "the normal item first",
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0002.1",
+        "kind": "item",
+        "id": "PA-0002",
+        "state": "recorded",
+        "lane": "normal",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z"
+      }
+    },
+    {
+      "note": "an item that is not stopped cannot be released",
+      "as": "countersign",
+      "method": "POST",
+      "path": "/v1/release",
+      "send": {
+        "contract": "v1",
+        "id": "PA-0001"
+      },
+      "status": 409,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "move_not_allowed",
+        "reason": "that move is not allowed"
+      }
+    },
+    {
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0002.1",
+        "state": "observed"
+      },
+      "status": 200,
+      "want": {
+        "id": "PA-0002",
+        "state": "observed",
+        "next": "assay"
+      }
+    },
+    {
+      "note": "then the backfill item",
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0001.2",
+        "kind": "item",
+        "id": "PA-0001",
+        "state": "recorded",
+        "lane": "backfill",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z"
+      }
+    },
+    {
+      "note": "work on it stops",
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/fail",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0001.2",
+        "code": "E_PARSE"
+      },
+      "status": 200,
+      "want": {
+        "id": "PA-0001",
+        "state": "recorded",
+        "held": true
+      }
+    },
+    {
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 204
+    },
+    {
+      "note": "Countersign passes on the owner's decision",
+      "as": "countersign",
+      "method": "POST",
+      "path": "/v1/release",
+      "send": {
+        "contract": "v1",
+        "id": "PA-0001"
+      },
+      "status": 200,
+      "want": {
+        "id": "PA-0001",
+        "state": "recorded",
+        "next": "sextant"
+      }
+    },
+    {
+      "note": "it is no longer stopped",
+      "as": "countersign",
+      "method": "POST",
+      "path": "/v1/release",
+      "send": {
+        "contract": "v1",
+        "id": "PA-0001"
+      },
+      "status": 409,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "move_not_allowed",
+        "reason": "that move is not allowed"
+      }
+    },
+    {
+      "note": "urgent now, still recorded, second attempt",
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0001.3",
+        "kind": "item",
+        "id": "PA-0001",
+        "state": "recorded",
+        "lane": "urgent",
+        "attempt": 2,
+        "expires": "2026-01-05T09:01:00Z"
+      }
+    },
+    {
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0001.3",
+        "state": "observed"
+      },
+      "status": 200,
+      "want": {
+        "id": "PA-0001",
+        "state": "observed",
+        "next": "assay"
+      }
+    },
+    {
+      "note": "an item that does not exist",
+      "as": "countersign",
+      "method": "POST",
+      "path": "/v1/release",
+      "send": {
+        "contract": "v1",
+        "id": "PA-0009"
+      },
+      "status": 409,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "move_not_allowed",
+        "reason": "that move is not allowed"
+      }
+    },
+    {
+      "note": "not an item identifier",
+      "as": "countersign",
+      "method": "POST",
+      "path": "/v1/release",
+      "send": {
+        "contract": "v1",
+        "id": "EP-0001"
+      },
+      "status": 400,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "bad_field",
+        "reason": "a field does not have the form this call requires"
+      }
+    },
+    {
+      "note": "not the form of an identifier",
+      "as": "countersign",
+      "method": "POST",
+      "path": "/v1/release",
+      "send": {
+        "contract": "v1",
+        "id": "PA-00001"
+      },
+      "status": 400,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "bad_field",
+        "reason": "a field does not have the form this call requires"
+      }
+    },
+    {
+      "note": "no item named",
+      "as": "countersign",
+      "method": "POST",
+      "path": "/v1/release",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 400,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "missing_field",
+        "reason": "a required field is missing"
+      }
+    },
+    {
+      "note": "only Countersign may release",
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/release",
+      "send": {
+        "contract": "v1",
+        "id": "PA-0002"
+      },
+      "status": 403,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "not_your_call",
+        "reason": "this caller may not make this call"
+      }
+    }
+  ]
+}

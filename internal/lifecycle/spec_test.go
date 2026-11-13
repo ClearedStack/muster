@@ -5,37 +5,38 @@ import (
 	"os"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 )
 
-// The tables in SPEC.md and the tables in this package must say the
+// The tables in the contract and the tables in this package must say the
 // same thing. If one is changed without the other, these tests fail.
+
+const contractFile = "../../contract/v1/CONTRACT.md"
 
 func specSection(t *testing.T, heading string) [][]string {
 	t.Helper()
-	data, err := os.ReadFile("../../SPEC.md")
+	data, err := os.ReadFile(contractFile)
 	if err != nil {
 		t.Fatal(err)
 	}
 	text := string(data)
 	at := strings.Index(text, heading+"\n")
 	if at < 0 {
-		t.Fatalf("SPEC.md has no heading %q", heading)
+		t.Fatalf("the contract has no heading %q", heading)
 	}
 	var rows [][]string
-	seenTable := false
 	for _, line := range strings.Split(text[at+len(heading):], "\n")[1:] {
 		if strings.HasPrefix(line, "#") {
 			break
 		}
 		if !strings.HasPrefix(line, "|") {
-			if seenTable && len(rows) > 0 && heading != "### Edit intake" {
+			if len(rows) > 0 {
 				break
 			}
 			continue
 		}
-		seenTable = true
 		cells := strings.Split(strings.Trim(line, "|"), "|")
 		for i := range cells {
 			cells[i] = strings.TrimSpace(cells[i])
@@ -55,9 +56,9 @@ func ticks(cell string) []string {
 	return out
 }
 
-func TestSpecStateTableMatches(t *testing.T) {
+func TestContractStateTableMatches(t *testing.T) {
 	var spec []string
-	for _, row := range specSection(t, "### Item states and moves") {
+	for _, row := range specSection(t, "## Item states and moves") {
 		from := ticks(row[0])
 		if len(row) != 2 || len(from) != 1 {
 			continue // the header and the rule under it
@@ -88,8 +89,10 @@ func routeLine(r Route) string {
 	if next == "" {
 		next = "none"
 	}
-	return fmt.Sprintf("%s: %s > %s, then %s %s", r.Worker, r.From, r.To, next, r.Lane)
+	return fmt.Sprintf("%s: %s > %s, then %s, lane %q, after %d days", r.Worker, r.From, r.To, next, r.Lane, r.AfterDays)
 }
+
+var daysLater = regexp.MustCompile(`([0-9]+) days later`)
 
 func specRoutes(t *testing.T, heading string, kind Kind) []string {
 	t.Helper()
@@ -108,29 +111,32 @@ func specRoutes(t *testing.T, heading string, kind Kind) []string {
 		if next != "none" {
 			r.Next = next
 		}
+		if m := daysLater.FindStringSubmatch(row[3]); m != nil {
+			r.AfterDays, _ = strconv.Atoi(m[1])
+		}
 		out = append(out, routeLine(r))
 	}
 	return out
 }
 
-func TestSpecRouteTablesMatch(t *testing.T) {
+func TestContractRouteTablesMatch(t *testing.T) {
 	code := map[Kind][]string{}
 	for _, r := range Routes() {
 		code[r.Kind] = append(code[r.Kind], routeLine(r))
 	}
-	same(t, "item queue steps", specRoutes(t, "### Queue steps", KindItem), code[KindItem])
-	same(t, "proposal queue steps", specRoutes(t, "### Edit intake", KindProposal), code[KindProposal])
+	same(t, "item queue steps", specRoutes(t, "## Queue steps", KindItem), code[KindItem])
+	same(t, "proposal queue steps", specRoutes(t, "## Proposal steps", KindProposal), code[KindProposal])
 }
 
 func same(t *testing.T, what string, spec, code []string) {
 	t.Helper()
 	if len(spec) == 0 {
-		t.Fatalf("%s: nothing was read from SPEC.md", what)
+		t.Fatalf("%s: nothing was read from the contract", what)
 	}
 	sort.Strings(spec)
 	sort.Strings(code)
 	if strings.Join(spec, "\n") != strings.Join(code, "\n") {
-		t.Errorf("%s: SPEC.md and the code disagree\nSPEC.md:\n  %s\ncode:\n  %s",
+		t.Errorf("%s: the contract and the code disagree\ncontract:\n  %s\ncode:\n  %s",
 			what, strings.Join(spec, "\n  "), strings.Join(code, "\n  "))
 	}
 }

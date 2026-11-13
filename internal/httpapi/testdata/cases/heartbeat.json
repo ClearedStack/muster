@@ -57,6 +57,7 @@
       "status": 409,
       "want": {
         "error": "E_PARSE",
+        "cause": "lease_not_held",
         "reason": "the lease is not held"
       }
     },
@@ -72,6 +73,7 @@
       "status": 409,
       "want": {
         "error": "E_PARSE",
+        "cause": "lease_not_held",
         "reason": "the lease is not held"
       }
     },
@@ -87,6 +89,7 @@
       "status": 409,
       "want": {
         "error": "E_PARSE",
+        "cause": "lease_not_held",
         "reason": "the lease is not held"
       }
     },
@@ -101,7 +104,8 @@
       "status": 400,
       "want": {
         "error": "E_PARSE",
-        "reason": "a required field is missing or malformed"
+        "cause": "missing_field",
+        "reason": "a required field is missing"
       }
     }
   ]

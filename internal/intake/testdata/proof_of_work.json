@@ -92,9 +92,9 @@
     },
     {
       "name": "text that is not ASCII",
-      "token": "2026-01-05.12d31",
+      "token": "2026-01-05.1255d",
       "target": "catalog/sample-calculator/description",
-      "change": "Ünïcode — made-up change",
+      "change": "Ünïcode ✓ made-up change",
       "reason": "A made-up reason.",
       "bits": 20,
       "now": "2026-01-05T09:00:00Z",

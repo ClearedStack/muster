@@ -31,6 +31,7 @@ type Store struct {
 	items      map[string]logbook.Item
 	proposals  map[string]logbook.Proposal
 	entries    map[string]logbook.Entry
+	addresses  map[string]string
 	components map[string]logbook.Component
 	counters   map[string]uint64
 	countDay   string
@@ -44,6 +45,7 @@ func New() *Store {
 		items:      map[string]logbook.Item{},
 		proposals:  map[string]logbook.Proposal{},
 		entries:    map[string]logbook.Entry{},
+		addresses:  map[string]string{},
 		components: map[string]logbook.Component{},
 		counters:   map[string]uint64{},
 		counts:     map[string]int{},
@@ -68,7 +70,7 @@ func (s *Store) run(ctx context.Context, fn func(logbook.Tx) error, keep bool) (
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	t := &tx{s: s}
+	t := &txn{s: s}
 	done := false
 	defer func() {
 		if !done || err != nil || !keep {
@@ -88,30 +90,30 @@ func (s *Store) Ledger() []logbook.Record {
 	return append([]logbook.Record(nil), s.ledger...)
 }
 
-type tx struct {
+type txn struct {
 	s    *Store
 	undo []func()
 }
 
-func (t *tx) rollback() {
+func (t *txn) rollback() {
 	for i := len(t.undo) - 1; i >= 0; i-- {
 		t.undo[i]()
 	}
 	t.undo = nil
 }
 
-func (t *tx) Item(id string) (logbook.Item, bool) {
+func (t *txn) Item(id string) (logbook.Item, bool) {
 	v, ok := t.s.items[id]
 	return v, ok
 }
 
-func (t *tx) PutItem(v logbook.Item) {
+func (t *txn) PutItem(v logbook.Item) {
 	old, had := t.s.items[v.ID]
 	t.undo = append(t.undo, func() { restore(t.s.items, v.ID, old, had) })
 	t.s.items[v.ID] = v
 }
 
-func (t *tx) Paused(worker string) []logbook.Item {
+func (t *txn) Paused(worker string) []logbook.Item {
 	var out []logbook.Item
 	for _, it := range t.s.items {
 		if it.State == lifecycle.NeedsSubtool && it.PausedBy == worker {
@@ -122,42 +124,71 @@ func (t *tx) Paused(worker string) []logbook.Item {
 	return out
 }
 
-func (t *tx) Proposal(id string) (logbook.Proposal, bool) {
+func (t *txn) Proposal(id string) (logbook.Proposal, bool) {
 	v, ok := t.s.proposals[id]
 	return v, ok
 }
 
-func (t *tx) PutProposal(v logbook.Proposal) {
+func (t *txn) PutProposal(v logbook.Proposal) {
 	old, had := t.s.proposals[v.ID]
 	t.undo = append(t.undo, func() { restore(t.s.proposals, v.ID, old, had) })
 	t.s.proposals[v.ID] = v
 }
 
-func (t *tx) Entry(subject string) (logbook.Entry, bool) {
-	v, ok := t.s.entries[subject]
+func (t *txn) ItemAt(key string) (string, bool) {
+	id, ok := t.s.addresses[key]
+	return id, ok
+}
+
+func (t *txn) PutItemAt(key, id string) {
+	old, had := t.s.addresses[key]
+	t.undo = append(t.undo, func() { restore(t.s.addresses, key, old, had) })
+	t.s.addresses[key] = id
+}
+
+func (t *txn) Building(repository string) []logbook.Proposal {
+	var out []logbook.Proposal
+	for _, p := range t.s.proposals {
+		if p.Status == lifecycle.Building && p.Repository == repository {
+			out = append(out, p)
+		}
+	}
+	// Identifiers are handed out in order, so the order of identifiers
+	// is the order of arrival. A longer identifier is a later one.
+	sort.Slice(out, func(i, j int) bool {
+		if len(out[i].ID) != len(out[j].ID) {
+			return len(out[i].ID) < len(out[j].ID)
+		}
+		return out[i].ID < out[j].ID
+	})
+	return out
+}
+
+func (t *txn) Entry(key string) (logbook.Entry, bool) {
+	v, ok := t.s.entries[key]
 	return v, ok
 }
 
-func (t *tx) PutEntry(v logbook.Entry) {
-	old, had := t.s.entries[v.Subject]
-	t.undo = append(t.undo, func() { restore(t.s.entries, v.Subject, old, had) })
-	t.s.entries[v.Subject] = v
+func (t *txn) PutEntry(v logbook.Entry) {
+	old, had := t.s.entries[v.Key]
+	t.undo = append(t.undo, func() { restore(t.s.entries, v.Key, old, had) })
+	t.s.entries[v.Key] = v
 }
 
-func (t *tx) DeleteEntry(subject string) {
-	old, had := t.s.entries[subject]
+func (t *txn) DeleteEntry(key string) {
+	old, had := t.s.entries[key]
 	if !had {
 		return
 	}
-	t.undo = append(t.undo, func() { t.s.entries[subject] = old })
-	delete(t.s.entries, subject)
+	t.undo = append(t.undo, func() { t.s.entries[key] = old })
+	delete(t.s.entries, key)
 }
 
 func waiting(e logbook.Entry, now time.Time) bool {
-	return !e.Held && (e.Lease == "" || !e.Expires.After(now))
+	return !e.Held && !e.NotBefore.After(now) && (e.Lease == "" || !e.Expires.After(now))
 }
 
-func (t *tx) NextEntry(worker string, now time.Time) (logbook.Entry, bool) {
+func (t *txn) NextEntry(worker string, now time.Time) (logbook.Entry, bool) {
 	var best logbook.Entry
 	found := false
 	for _, e := range t.s.entries {
@@ -179,18 +210,18 @@ func earlier(a, b logbook.Entry) bool {
 	return a.Arrival < b.Arrival
 }
 
-func (t *tx) Component(slug string) (logbook.Component, bool) {
+func (t *txn) Component(slug string) (logbook.Component, bool) {
 	v, ok := t.s.components[slug]
 	return v, ok
 }
 
-func (t *tx) PutComponent(v logbook.Component) {
+func (t *txn) PutComponent(v logbook.Component) {
 	old, had := t.s.components[v.Slug]
 	t.undo = append(t.undo, func() { restore(t.s.components, v.Slug, old, had) })
 	t.s.components[v.Slug] = v
 }
 
-func (t *tx) Components() []logbook.Component {
+func (t *txn) Components() []logbook.Component {
 	out := make([]logbook.Component, 0, len(t.s.components))
 	for _, c := range t.s.components {
 		out = append(out, c)
@@ -199,7 +230,7 @@ func (t *tx) Components() []logbook.Component {
 	return out
 }
 
-func (t *tx) Depths(now time.Time) logbook.Depths {
+func (t *txn) Depths(now time.Time) logbook.Depths {
 	var d logbook.Depths
 	for _, e := range t.s.entries {
 		if !waiting(e, now) {
@@ -222,14 +253,14 @@ func (t *tx) Depths(now time.Time) logbook.Depths {
 	return d
 }
 
-func (t *tx) Next(counter string) uint64 {
+func (t *txn) Next(counter string) uint64 {
 	old := t.s.counters[counter]
 	t.undo = append(t.undo, func() { t.s.counters[counter] = old })
 	t.s.counters[counter] = old + 1
 	return old + 1
 }
 
-func (t *tx) Bump(day, key string) (int, bool) {
+func (t *txn) Bump(day, key string) (int, bool) {
 	if t.s.countDay != day {
 		oldDay, oldCounts := t.s.countDay, t.s.counts
 		t.undo = append(t.undo, func() { t.s.countDay, t.s.counts = oldDay, oldCounts })
@@ -245,7 +276,7 @@ func (t *tx) Bump(day, key string) (int, bool) {
 	return old + 1, true
 }
 
-func (t *tx) Append(r logbook.Record) {
+func (t *txn) Append(r logbook.Record) {
 	n := len(t.s.ledger)
 	if n >= 2*LedgerKept {
 		old := t.s.ledger

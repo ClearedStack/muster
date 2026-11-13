@@ -66,157 +66,29 @@ Every anonymous `✎ Edit` submission must pass all five layers before reaching 
 
 ## Contract v1
 
-> **Added during the first build, and not yet published.** The sections above name the calls, the states and the checks without defining them. Nothing can be built or tested against a name, so this section writes down what the first build does. Each part says where it came from. The [change log](#changes-to-this-specification) gives the reason for each addition, and [Open questions](#open-questions) lists what is still undecided.
-
-Every call is JSON over cluster-private HTTP. Every request body carries `"contract": "v1"`. A body with a field the call does not define is refused.
-
-### Item states and moves
-
-An item has an identifier of the form `PA-0001` and exactly one of fourteen states. The states and moves are the table "Which worker makes each move" on the [item lifecycle page](https://clearedstack.com/platform/item-lifecycle/). Where that page's figure and its table disagree, the table is followed.
-
-| From | May move to |
-| --- | --- |
-| `discovered` | `recorded`, `rejected` |
-| `recorded` | `observed`, `needs_subtool` |
-| `observed` | `scored`, `screened-out`, `needs_subtool` |
-| `screened-out` | `observed` |
-| `scored` | `approved`, `parked`, `linked`, `merged`, `rejected` |
-| `approved` | `building`, `needs_subtool` |
-| `building` | `live`, `parked` |
-| `live` | `building`, `retired` |
-| `parked` | `observed` |
-| `linked` | `observed` |
-| `merged` | `observed` |
-| `needs_subtool` | the state it was paused from, and no other |
-| `rejected` | nowhere |
-| `retired` | nowhere |
-
-Any other move is refused and changes nothing.
-
-### Lanes
-
-Every queue step is in one of three lanes. A worker is offered the `urgent` lane first, then `normal`, then `backfill`, and within a lane the step that arrived first.
-
-### Queue steps
-
-The queue holds, for each item or proposal, at most one step: the next thing to do, and which worker does it. Completing a step changes the state and writes the next step in one transaction. Which worker follows is fixed by this table. Each row comes from the published description of the worker named in it.
-
-| Worker | Holds an item in | Completes it to | Next step |
-| --- | --- | --- | --- |
-| Trawl | `discovered` | `recorded` | Sextant |
-| Trawl | `discovered` | `rejected` | none |
-| Sextant | `recorded` | `observed` | Assay |
-| Assay | `observed` | `scored` | Countersign |
-| Assay | `observed` | `screened-out` | Countersign, in case the owner overrides |
-| Countersign | `scored` | `approved` | Waybill |
-| Countersign | `scored` | `parked` | none |
-| Countersign | `scored` | `linked` | Chartroom |
-| Countersign | `scored` | `merged` | Chartroom |
-| Countersign | `scored` | `rejected` | none |
-| Countersign | `screened-out` | `observed` | Assay |
-| Waybill | `approved` | `approved` (specification written) | Moldloft |
-| Moldloft | `approved` | `building` | Shakedown |
-| Shakedown | `building` | `building` (conditions passed) | Chartroom |
-| Shakedown | `building` | `parked` | none |
-| Chartroom | `building` | `live` | none |
-| Chartroom | `linked` | `linked` (link listed) | none |
-| Chartroom | `merged` | `merged` (merge listed) | none |
-
-A worker may complete only its own rows. Tidegauge has no rows yet; see [Open questions](#open-questions).
-
-### The five worker calls
-
-A worker presents its Kubernetes ServiceAccount token as a bearer token. Muster asks the cluster whose token it is, and accepts a ServiceAccount in `cs-workers` whose name is the worker's registry name.
-
-| Call | Request | Answer |
-| --- | --- | --- |
-| `POST /v1/lease` | `contract` | `200` with `lease`, `kind` (`item` or `proposal`), `id`, `state`, `lane`, `attempt`, `expires`, and either `results` (the latest result from each earlier worker, by worker) or `proposal`. `204` when there is nothing for this worker. |
-| `POST /v1/heartbeat` | `contract`, `lease` | `200` with `lease` and the new `expires` |
-| `POST /v1/complete` | `contract`, `lease`, `state`, optional `result` (a JSON object) | `200` with `id`, `state` and `next` (the worker whose step follows, if any) |
-| `POST /v1/fail` | `contract`, `lease`, `code` (`E_TIMEOUT` or `E_PARSE`) | `200` with `id`, `state`, and `next` or `held` |
-| `POST /v1/needs_subtool` | `contract`, `lease` | `200` with `id` and `state` |
-
-- **Leases.** A lease lasts 60 seconds unless configured otherwise. A heartbeat moves its end to one lease length from now. When a lease runs out the step is offered again, and from then on the worker that lost it is refused. Until someone else takes the step, a late lease still counts, so a finished result that arrives late is kept.
-- **Repeats.** A worker repeats a call until it is acknowledged. Repeating the call that ended a lease gives the same answer and does nothing twice.
-- **`fail` with `E_TIMEOUT`.** The step stays in the queue, in its place, to be tried again.
-- **`fail` with `E_PARSE`.** Work on that item stops. It keeps its state and is not offered again.
-- **`needs_subtool`.** Allowed only where the state table allows it. The item moves to `needs_subtool` and leaves the queue, remembering the state it was in and the worker that paused it.
-- **Replay.** When Shipkeeper reports an image digest for a worker that differs from the last digest recorded for it, every item that worker paused returns to the state it was paused from, in the `urgent` lane, in the order the items were paused. The first digest ever reported for a worker is only recorded.
-- **A request body** may be at most 64 KiB.
-
-### Errors
-
-A refusal is an HTTP status and a body of the form `{"error": "E_PARSE", "reason": "that move is not allowed"}`. The code is always one of the three. The reason is one of a fixed list of sentences, none of which is built from request data or from an error of another system.
-
-| Case | Status | Code |
-| --- | --- | --- |
-| Not JSON, an unknown field, a missing or malformed field | `400` | `E_PARSE` |
-| No valid credential | `401` | `E_PARSE` |
-| A caller making a call that is not its own | `403` | `E_PARSE` |
-| No such call; wrong method; wrong content type; request too large | `404`, `405`, `415`, `413` | `E_PARSE` |
-| A lease that is not held; a move that is not allowed | `409` | `E_PARSE` |
-| A contract version or a health state Muster does not know | `422` | `E_NEEDS_SUBTOOL` |
-| Too many edit submissions from one source today | `429` | `E_TIMEOUT` |
-| Logbook or the identity check took too long; too many calls at once | `503` | `E_TIMEOUT` |
-| A stored record that contradicts the tables (it is set aside); anything unexpected | `500` | `E_PARSE` |
-
-The three codes do not cover every refusal exactly. Where none fits, the status says what happened and the code is the nearest of the three.
-
-### Health reports
-
-Shipkeeper calls `POST /v1/health` with `contract` and `reports`, a list of up to 64. A report has `component` (a registry name), `state` (`healthy`, `idle`, `degraded` or `paused`), and optionally `code` (one of the three error codes) and `digest` (`sha256:` and 64 hexadecimal digits). There is no free-text field, and a report with any other field is refused, so a report has nowhere to carry a node name or an address. A batch is kept whole or refused whole.
-
-### Live feed
-
-Conn subscribes with `GET /v1/feed` and receives Server-Sent Events of three kinds. Every event carries `at`, the time it was produced.
-
-| Event | Data |
-| --- | --- |
-| `depths` | `urgent`, `normal`, `backfill`: steps that could be leased now. `needs_subtool`: items paused for a missing rule |
-| `health` | `component`, `state`, and `code` if there is one |
-| `edit` | `id` and `status` of a proposal whose status changed |
-
-A new subscriber is first sent the current depths and the latest health of every component. After that, updates go out together in one batch every 5 seconds, never one at a time. Each batch begins with a `depths` event, so a healthy feed is never silent for more than one interval, well inside the 15 seconds after which it counts as stale. At most 8 subscribers are served at once, and one that falls behind is disconnected.
-
-### Edit intake
-
-Conn calls `POST /v1/edits` with `contract`, `target`, `change`, `reason`, `pow`, `honeypot` and `source` (the visitor's address). The whole request may be at most 4,096 bytes; this is checked first, because a request that is too large is never read to the end.
-
-1. **Proof of work.** The token is `<day>.<nonce>`: the UTC date as `2026-01-05`, and up to 32 lower-case hexadecimal digits. It is valid when the SHA-256 hash of `muster-pow-v1`, `day`, `target`, `change`, `reason` and `nonce`, joined by single zero bytes, begins with at least 20 zero bits, and the day is today or yesterday in UTC. The hash covers the text, so a token cannot be reused for a different proposal.
-2. **Honeypot.** If `honeypot` is not empty the answer is `204` and nothing is kept, counted or published.
-3. **Rate limit.** The key for a source is HMAC-SHA-256 of its address under that day's salt. The day's salt is HMAC-SHA-256 of the UTC date under a secret created inside the cluster. At most 5 submissions a day are kept per key. Every submission that reaches this check counts, whether or not it passes the next one. The address is used for this one hash and is never stored or logged.
-4. **Shape and size.** `target` must be in `ownership_map.json`. Markup is stripped from `change` and `reason`: comments, `script` and `style` elements with their contents, and anything shaped like a tag. If nothing is left of `change`, the proposal is refused.
-5. **Review gate.** The proposal is kept as `pending_approval`, given an identifier of the form `EP-0001`, and queued for Countersign. The answer is `202` with `id` and `status`.
-
-`ownership_map.json` has the form `{"elements": {"<target>": {"repository": "...", "file": "...", "kind": "DATA"}}}`. `repository` must be a repository in the naming registry and `kind` one of `DATA`, `CONFIG` and `ISSUE`.
-
-A proposal moves through its own statuses by the same lease and complete calls as an item. A decision on a proposal carries no `result`.
-
-| Worker | Holds a proposal in | Completes it to | Next step |
-| --- | --- | --- | --- |
-| Countersign | `pending_approval` | `approved` | Bellbuoy, in the `urgent` lane |
-| Countersign | `pending_approval` | `declined` | none |
-| Bellbuoy | `approved` | `building` | none |
-
-### Callers other than workers
-
-Conn and Shipkeeper present a ServiceAccount token in the same way as workers, and Muster accepts a ServiceAccount in `clearedstack` named `conn` or `shipkeeper`. Only Conn may read the feed or submit a proposal, and only Shipkeeper may report health. Without this, any pod that can reach Muster, including a worker that reads untrusted pages, could forge a health report and trigger a replay.
-
-`GET /healthz` needs no token. It answers `200` while Muster is up, for the cluster's own checks.
+The calls, the states, the queue and the refusals are defined in [`contract/v1/CONTRACT.md`](contract/v1/CONTRACT.md), with one saved example for each call and each refusal in [`contract/v1/examples/`](contract/v1/examples). The sections above name these things; the contract defines them. Where the two differ in detail, the contract is what the build follows, and the change log below says why.
 
 ## Open questions
 
-These could not be settled from the published pages. The first build does not guess at them; the README lists each as not yet done.
+These could not be settled from the published pages or the contract. The build does not guess at them; the README lists each as not yet done.
 
-1. **How an item is created.** None of the five calls records a new candidate, so nothing can put a `discovered` item into Logbook through Muster.
-2. **Tidegauge's work.** Its moves are in the state table (`live` to `building` or `retired`; `parked`, `linked` or `merged` back to `observed`), but nothing says what a scheduled check is, how often one is due, or which worker follows a reopened item. Tidegauge is always told there is nothing to lease.
-3. **Bellbuoy's other work.** Routing approved edits is defined above. Turning failures and paused items into tasks is not: nothing says what Bellbuoy is given.
-4. **A proposal from `building` to `live`.** Nothing says who reports that an approved edit has been built and deployed.
-5. **After `E_PARSE`.** A stopped item is never offered again. Nothing says how it is released once the cause is fixed.
-6. **Which worker pauses a `recorded` item.** The lifecycle table says intake has no rule for the source, which points at Trawl, but Trawl holds items in `discovered`, which has no move to `needs_subtool`. The first build follows the state table: Sextant can pause a `recorded` item and Trawl cannot pause anything.
-7. **Health states.** Shipkeeper's page says it sends `healthy`, `idle`, `degraded` and `paused`. The operations page lists six display states: `healthy`, `idle`, `erroring`, `recovering`, `stale` and `empty`. The first build accepts and republishes the four Shipkeeper sends, unchanged, and leaves the mapping to Conn.
-8. **Duties named on other pages only.** The pipeline page says the hub rejects any message to Moldloft that carries a raw page captured by Sextant, without saying how one is recognised. Countersign's page says Muster rejects an override with no written reason. Shipkeeper's page says the owner's install, upgrade, pause and rollback actions are routed through Muster. None of these is in this specification, and none is built.
-9. **The hub repository.** `ownership_map.json` and the worker contract are said to live in "the hub repository". This specification assumes that is not Muster's concern: Muster is given the ownership map as a file.
+1. **Four of Tidegauge's moves.** Every live item now comes to Tidegauge for a check every seven days, and a check can leave it live or retire it. The other moves in the state table have no next worker: `live` to `building`, and `parked`, `linked` or `merged` back to `observed`. Nothing says which worker follows, or how Tidegauge comes to hold a parked, linked or merged item.
+2. **Which worker pauses a `recorded` item.** The lifecycle table says intake has no rule for the source, which points at Trawl, but Trawl holds items in `discovered`, which has no move to `needs_subtool`. The build follows the state table: Sextant can pause a `recorded` item and Trawl cannot pause anything.
+3. **Health states.** Shipkeeper's page says it sends `healthy`, `idle`, `degraded` and `paused`. The operations page lists six display states: `healthy`, `idle`, `erroring`, `recovering`, `stale` and `empty`. The build accepts and republishes the four Shipkeeper sends, unchanged, and leaves the mapping to Conn.
+4. **Duties named on other pages only.** The pipeline page says the hub rejects any message to Moldloft that carries a raw page captured by Sextant, without saying how one is recognised. Countersign's page says Muster rejects an override with no written reason. Shipkeeper's page says the owner's install, upgrade, pause and rollback actions are routed through Muster. None of these is in this specification or the contract, and none is built.
+5. **The hub repository.** `ownership_map.json` is said to live in "the hub repository". This specification assumes that is not Muster's concern: Muster is given the ownership map as a file.
+6. **A `DATA` edit.** A proposal goes live when Shipkeeper reports a new digest for its repository. A `DATA` edit changes a record and may never cause a new image, so it would wait in `building` for the next unrelated deploy of that repository.
+
+Choices the contract left to the build, each easy to change and each pinned by a saved example:
+
+- **The cause `duplicate`** is used in one place: a batch of health reports that names the same component twice.
+- **A slow identity check** answers `503` with the cause `busy`, since `store_slow` would name the wrong thing.
+- **Release** is its own call, `POST /v1/release`, made by Countersign, because a stopped item is never offered for lease.
+- **A new item's lane** follows its source: `web-sweep` starts in `backfill`, the other three in `normal`.
+- **A `site-form` candidate** carries two more fields than the others, `pow` and `visitor`, because the proof of work and the daily limit need them. It shares one daily count with that visitor's edit proposals.
+- **An incident step** is in the `normal` lane, and its `state` is the state the item was in when the worker stopped.
+- **A live item with no check recorded,** as in a seed file, is due for one at once.
+- **The 4 KB limit on an edit proposal** is checked with the other shape checks, after the rate limit, now that every body is read up to 64 KiB.
 
 ## Changes to this specification
 
@@ -227,7 +99,13 @@ These could not be settled from the published pages. The first build does not gu
 | Mapped every refusal to an HTTP status plus the nearest of the three codes | Only three public codes are allowed, and an illegal move, an expired lease and a missing credential fit none of them exactly |
 | Required a ServiceAccount token from Conn and Shipkeeper as well as from workers | The interface table lists authentication for workers only, which would let any pod that can reach Muster forge a health report or a proposal |
 | Added `GET /healthz` | A pod needs something the cluster can check |
-| Added **Open questions** | To record what the first build refuses to guess |
+| Moved the contract to `contract/v1/CONTRACT.md`, with saved examples beside it | So that the workers, Conn and Shipkeeper have one file to build against, and examples that are replayed against Muster |
+| Spelled the state `screened_out` | One spelling for every state: lower case with underscores |
+| Fixed the form of item and proposal identifiers | So that an identifier has exactly one spelling |
+| Gave every refusal a `cause` | The three codes cannot tell a caller what to do next; the cause can |
+| Added `POST /v1/items` | Nothing could record a new candidate |
+| Raised Waybill's `complete` to 256 KiB and set every other body to 64 KiB | A specification is larger than any other result |
+| Added the seven-day Tidegauge check, Bellbuoy's incident step, the move of a proposal to `live` and the owner's release | These were open questions; each now has a rule |
 
 ## Related pages
 

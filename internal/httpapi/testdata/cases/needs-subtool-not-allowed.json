@@ -53,6 +53,7 @@
       "status": 409,
       "want": {
         "error": "E_PARSE",
+        "cause": "move_not_allowed",
         "reason": "that move is not allowed"
       }
     },
@@ -86,6 +87,7 @@
       "status": 409,
       "want": {
         "error": "E_PARSE",
+        "cause": "move_not_allowed",
         "reason": "that move is not allowed"
       }
     },
@@ -134,6 +136,7 @@
       "status": 409,
       "want": {
         "error": "E_PARSE",
+        "cause": "lease_not_held",
         "reason": "the lease is not held"
       }
     }

@@ -16,7 +16,7 @@ var ctx = context.Background()
 var t0 = time.Date(2026, 1, 5, 9, 0, 0, 0, time.UTC)
 
 func entry(subject, worker string, lane lifecycle.Lane, arrival uint64) logbook.Entry {
-	return logbook.Entry{Subject: subject, Kind: lifecycle.KindItem, Worker: worker, Lane: lane, Arrival: arrival}
+	return logbook.Entry{Key: subject, Subject: subject, Kind: lifecycle.KindItem, Worker: worker, Lane: lane, Arrival: arrival}
 }
 
 // Everything a failed transaction changed is undone: items, proposals,
@@ -29,6 +29,7 @@ func TestFailedTransactionChangesNothing(t *testing.T) {
 		tx.PutEntry(entry("PA-0002", "sextant", lifecycle.Normal, tx.Next(logbook.CounterArrival)))
 		tx.PutProposal(logbook.Proposal{ID: "EP-0001", Status: lifecycle.PendingApproval})
 		tx.PutComponent(logbook.Component{Slug: "sextant", State: "healthy"})
+		tx.PutItemAt("made-up-address-key", "PA-0001")
 		tx.Bump("2026-01-05", "made-up-key")
 		tx.Append(logbook.Record{Seq: 1, Action: logbook.ActLease})
 		return nil
@@ -44,6 +45,8 @@ func TestFailedTransactionChangesNothing(t *testing.T) {
 		tx.PutProposal(logbook.Proposal{ID: "EP-0002", Status: lifecycle.PendingApproval})
 		tx.PutComponent(logbook.Component{Slug: "sextant", State: "degraded"})
 		tx.PutComponent(logbook.Component{Slug: "assay", State: "healthy"})
+		tx.PutItemAt("made-up-address-key", "PA-0009")
+		tx.PutItemAt("another-made-up-address-key", "PA-0009")
 		tx.Bump("2026-01-05", "made-up-key")
 		tx.Bump("2026-01-06", "another-made-up-key") // a new day clears the old counts
 		tx.Append(logbook.Record{Seq: 2, Action: logbook.ActComplete})
@@ -77,6 +80,12 @@ func TestFailedTransactionChangesNothing(t *testing.T) {
 		}
 		if len(tx.Components()) != 1 {
 			t.Error("a new component was kept")
+		}
+		if id, _ := tx.ItemAt("made-up-address-key"); id != "PA-0001" {
+			t.Errorf("an address now belongs to %q", id)
+		}
+		if _, ok := tx.ItemAt("another-made-up-address-key"); ok {
+			t.Error("a new address was kept")
 		}
 		if n := tx.Next(logbook.CounterArrival); n != 3 {
 			t.Errorf("the arrival counter moved: next is %d, want 3", n)
@@ -151,6 +160,9 @@ func TestNextEntryOrder(t *testing.T) {
 		leased := entry("PA-0007", "sextant", lifecycle.Urgent, 7)
 		leased.Lease, leased.Expires = "PA-0007.1", t0.Add(time.Minute)
 		tx.PutEntry(leased)
+		later := entry("PA-0008", "sextant", lifecycle.Urgent, 8)
+		later.NotBefore = t0.Add(7 * 24 * time.Hour)
+		tx.PutEntry(later)
 		return nil
 	}))
 	var got []string
@@ -176,6 +188,14 @@ func TestNextEntryOrder(t *testing.T) {
 		if e, ok := tx.NextEntry("sextant", t0.Add(time.Minute)); !ok || e.Subject != "PA-0007" {
 			t.Error("an entry whose lease had ended was not offered")
 		}
+		tx.DeleteEntry("PA-0007")
+		// A step that is not yet due is not offered until it is.
+		if _, ok := tx.NextEntry("sextant", t0.Add(7*24*time.Hour-time.Nanosecond)); ok {
+			t.Error("a step was offered before it was due")
+		}
+		if e, ok := tx.NextEntry("sextant", t0.Add(7*24*time.Hour)); !ok || e.Subject != "PA-0008" {
+			t.Error("a step that had come due was not offered")
+		}
 		return nil
 	}))
 }
@@ -195,6 +215,9 @@ func TestDepths(t *testing.T) {
 		tx.PutEntry(leased)
 		tx.PutItem(logbook.Item{ID: "PA-0007", State: lifecycle.NeedsSubtool, PausedBy: "sextant"})
 		tx.PutItem(logbook.Item{ID: "PA-0008", State: lifecycle.Live})
+		later := entry("PA-0008", "tidegauge", lifecycle.Backfill, 7)
+		later.NotBefore = t0.Add(time.Hour)
+		tx.PutEntry(later) // not yet due, so not waiting
 		return nil
 	}))
 	must(t, s.View(ctx, func(tx logbook.Tx) error {
@@ -292,15 +315,18 @@ func TestSeedRefusals(t *testing.T) {
 		}
 	}
 	bad := map[string]string{
-		"an identifier of the wrong form": `{"items":[{"id":"0001","state":"recorded","lane":"normal"}]}`,
-		"an item listed twice":            `{"items":[{"id":"PA-0001","state":"recorded","lane":"normal"},{"id":"PA-0001","state":"live","lane":"normal"}]}`,
-		"a state that does not exist":     `{"items":[{"id":"PA-0001","state":"finished","lane":"normal"}]}`,
-		"a proposal status":               `{"items":[{"id":"PA-0001","state":"pending_approval","lane":"normal"}]}`,
-		"a paused item":                   `{"items":[{"id":"PA-0001","state":"needs_subtool","lane":"normal"}]}`,
-		"a lane that does not exist":      `{"items":[{"id":"PA-0001","state":"recorded","lane":"fast"}]}`,
-		"no lane":                         `{"items":[{"id":"PA-0001","state":"recorded"}]}`,
-		"a worker with no step there":     `{"items":[{"id":"PA-0001","state":"recorded","lane":"normal","next":"assay"}]}`,
-		"a next step that is no worker":   `{"items":[{"id":"PA-0001","state":"recorded","lane":"normal","next":"conn"}]}`,
+		"an identifier of the wrong form":  `{"items":[{"id":"0001","state":"recorded","lane":"normal"}]}`,
+		"an identifier with three digits":  `{"items":[{"id":"PA-001","state":"recorded","lane":"normal"}]}`,
+		"a padded identifier that is long": `{"items":[{"id":"PA-00001","state":"recorded","lane":"normal"}]}`,
+		"an identifier with ten digits":    `{"items":[{"id":"PA-1000000000","state":"recorded","lane":"normal"}]}`,
+		"an item listed twice":             `{"items":[{"id":"PA-0001","state":"recorded","lane":"normal"},{"id":"PA-0001","state":"live","lane":"normal"}]}`,
+		"a state that does not exist":      `{"items":[{"id":"PA-0001","state":"finished","lane":"normal"}]}`,
+		"a proposal status":                `{"items":[{"id":"PA-0001","state":"pending_approval","lane":"normal"}]}`,
+		"a paused item":                    `{"items":[{"id":"PA-0001","state":"needs_subtool","lane":"normal"}]}`,
+		"a lane that does not exist":       `{"items":[{"id":"PA-0001","state":"recorded","lane":"fast"}]}`,
+		"no lane":                          `{"items":[{"id":"PA-0001","state":"recorded"}]}`,
+		"a worker with no step there":      `{"items":[{"id":"PA-0001","state":"recorded","lane":"normal","next":"assay"}]}`,
+		"a next step that is no worker":    `{"items":[{"id":"PA-0001","state":"recorded","lane":"normal","next":"conn"}]}`,
 	}
 	for name, text := range bad {
 		seed, err := ParseSeed([]byte(text))
@@ -317,6 +343,54 @@ func TestSeedRefusals(t *testing.T) {
 			return nil
 		}))
 	}
+}
+
+// A live item in a seed is given its Tidegauge check without being
+// asked, and new items are numbered after the highest one in the seed.
+func TestSeedLiveItemsAndNumbering(t *testing.T) {
+	seed, err := ParseSeed([]byte(`{"items":[
+		{"id":"PA-0041","state":"live","lane":"normal"},
+		{"id":"PA-10000","state":"recorded","lane":"normal","next":"sextant"},
+		{"id":"PA-0007","state":"rejected","lane":"normal"}]}`))
+	must(t, err)
+	s := New()
+	must(t, s.Load(seed))
+	must(t, s.View(ctx, func(tx logbook.Tx) error {
+		e, ok := tx.Entry("PA-0041")
+		if !ok || e.Worker != "tidegauge" || e.Lane != lifecycle.Backfill || !e.NotBefore.IsZero() {
+			t.Errorf("the live item's check: %+v, %v", e, ok)
+		}
+		if _, ok := tx.Entry("PA-0007"); ok {
+			t.Error("a rejected item was given a step")
+		}
+		if n := tx.Next(logbook.CounterItem); n != 10001 {
+			t.Errorf("the next item would be numbered %d, want 10001", n)
+		}
+		return nil
+	}))
+}
+
+func TestBuildingOrder(t *testing.T) {
+	s := New()
+	must(t, s.Update(ctx, func(tx logbook.Tx) error {
+		for _, p := range []logbook.Proposal{
+			{ID: "EP-10000", Repository: "sextant", Status: lifecycle.Building},
+			{ID: "EP-9999", Repository: "sextant", Status: lifecycle.Building},
+			{ID: "EP-0002", Repository: "sextant", Status: lifecycle.Building},
+			{ID: "EP-0001", Repository: "sextant", Status: lifecycle.Approved},
+			{ID: "EP-0003", Repository: "assay", Status: lifecycle.Building},
+		} {
+			tx.PutProposal(p)
+		}
+		var got []string
+		for _, p := range tx.Building("sextant") {
+			got = append(got, p.ID)
+		}
+		if fmt.Sprint(got) != "[EP-0002 EP-9999 EP-10000]" {
+			t.Errorf("building for sextant: %v", got)
+		}
+		return nil
+	}))
 }
 
 func must(t *testing.T, err error) {

@@ -107,12 +107,12 @@
       "send": {
         "contract": "v1",
         "lease": "PA-0002.2",
-        "state": "screened-out"
+        "state": "screened_out"
       },
       "status": 200,
       "want": {
         "id": "PA-0002",
-        "state": "screened-out",
+        "state": "screened_out",
         "next": "countersign"
       }
     },
@@ -253,7 +253,7 @@
       }
     },
     {
-      "note": "the screened-out item, which joined Countersign's queue last",
+      "note": "the screened_out item, which joined Countersign's queue last",
       "as": "countersign",
       "method": "POST",
       "path": "/v1/lease",
@@ -265,7 +265,7 @@
         "lease": "PA-0002.7",
         "kind": "item",
         "id": "PA-0002",
-        "state": "screened-out",
+        "state": "screened_out",
         "lane": "normal",
         "attempt": 1,
         "expires": "2026-01-05T09:01:00Z"

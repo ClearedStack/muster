@@ -1,5 +1,5 @@
 {
-  "about": "One item walks the whole pipeline. Each completion changes the state and queues the next worker's step, and each worker is shown the results of those before it.",
+  "about": "One item walks the whole pipeline. Each completion changes the state and queues the next worker's step, and each worker is given the results of those before it, by worker.",
   "seed": {
     "items": [
       {
@@ -49,6 +49,7 @@
       }
     },
     {
+      "note": "results.trawl",
       "as": "sextant",
       "method": "POST",
       "path": "/v1/lease",
@@ -91,6 +92,7 @@
       }
     },
     {
+      "note": "results.trawl and results.sextant",
       "as": "assay",
       "method": "POST",
       "path": "/v1/lease",
@@ -365,7 +367,7 @@
       }
     },
     {
-      "note": "no step follows",
+      "note": "live: Tidegauge's first check is queued for seven days from now",
       "as": "chartroom",
       "method": "POST",
       "path": "/v1/complete",
@@ -377,7 +379,8 @@
       "status": 200,
       "want": {
         "id": "PA-0001",
-        "state": "live"
+        "state": "live",
+        "next": "tidegauge"
       }
     },
     {

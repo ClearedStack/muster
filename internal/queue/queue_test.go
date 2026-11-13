@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"flag"
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -190,15 +191,15 @@ func TestInconsistentEntryIsSetAside(t *testing.T) {
 	if err := store.Update(ctx, func(tx logbook.Tx) error {
 		// Live is not a state Sextant has anything to do with.
 		tx.PutItem(logbook.Item{ID: "PA-0001", State: lifecycle.Live, Lane: lifecycle.Urgent})
-		tx.PutEntry(logbook.Entry{Subject: "PA-0001", Kind: lifecycle.KindItem, Worker: "sextant", Lane: lifecycle.Urgent, Arrival: 99})
+		tx.PutEntry(logbook.Entry{Key: "PA-0001", Subject: "PA-0001", Kind: lifecycle.KindItem, Worker: "sextant", Lane: lifecycle.Urgent, Arrival: 99})
 		// And this entry is about an item that does not exist.
-		tx.PutEntry(logbook.Entry{Subject: "PA-0003", Kind: lifecycle.KindItem, Worker: "sextant", Lane: lifecycle.Urgent, Arrival: 100})
+		tx.PutEntry(logbook.Entry{Key: "PA-0003", Subject: "PA-0003", Kind: lifecycle.KindItem, Worker: "sextant", Lane: lifecycle.Urgent, Arrival: 100})
 		return nil
 	}); err != nil {
 		t.Fatal(err)
 	}
 	for i := 0; i < 2; i++ {
-		if g, err := q.Lease(ctx, "sextant"); g != nil || err != contract.Inconsistent {
+		if g, err := q.Lease(ctx, "sextant"); g != nil || err != contract.BadRecord {
 			t.Fatalf("lease %d: got %+v, %v", i+1, g, err)
 		}
 	}
@@ -228,6 +229,92 @@ func TestInconsistentEntryIsSetAside(t *testing.T) {
 	}
 	if setAside != 2 {
 		t.Errorf("the ledger records %d set-aside entries, want 2", setAside)
+	}
+	// Bellbuoy is told about the item that exists, and is not sent after
+	// one that does not.
+	inc := must(q.Lease(ctx, "bellbuoy"))(t)
+	if inc == nil || inc.Kind != lifecycle.KindIncident || *inc.Incident != (queue.IncidentView{ID: "PA-0001", Worker: "sextant", Code: "E_PARSE", State: lifecycle.Live}) {
+		t.Errorf("the incident: %+v", inc)
+	}
+	if more := must(q.Lease(ctx, "bellbuoy"))(t); more != nil {
+		t.Errorf("a second incident: %+v", more)
+	}
+}
+
+// An item has at most one incident step. If it is stopped again before
+// Bellbuoy has dealt with the first, the newer incident takes its place.
+func TestOneIncidentPerItem(t *testing.T) {
+	q, store, _ := setup(t, `{"items":[{"id":"PA-0001","state":"recorded","lane":"normal","next":"sextant"}]}`)
+	g := must(q.Lease(ctx, "sextant"))(t)
+	must(q.NeedsSubtool(ctx, "sextant", g.Lease))(t)
+	if err := store.Update(ctx, func(tx logbook.Tx) error {
+		queue.Replay(tx, "sextant", q.Clock())
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	g = must(q.Lease(ctx, "sextant"))(t)
+	must(q.Fail(ctx, "sextant", g.Lease, contract.Parse))(t)
+
+	inc := must(q.Lease(ctx, "bellbuoy"))(t)
+	if inc == nil || inc.Incident.Code != "E_PARSE" || inc.Incident.State != lifecycle.Recorded {
+		t.Fatalf("the incident: %+v", inc)
+	}
+	if more := must(q.Lease(ctx, "bellbuoy"))(t); more != nil {
+		t.Errorf("a second incident for one item: %+v", more)
+	}
+	// The incident step and the item's own step end separately, and a
+	// repeat of either call still gets its own answer.
+	must(q.Complete(ctx, "bellbuoy", inc.Lease, lifecycle.Recorded, nil))(t)
+	again := must(q.Fail(ctx, "sextant", g.Lease, contract.Parse))(t)
+	if !again.Held {
+		t.Errorf("the repeated fail: %+v", again)
+	}
+	done := must(q.Complete(ctx, "bellbuoy", inc.Lease, lifecycle.Recorded, nil))(t)
+	if done.ID != "PA-0001" || done.State != lifecycle.Recorded {
+		t.Errorf("the repeated complete: %+v", done)
+	}
+}
+
+// Release puts a stopped item at the end of the urgent lane, in the
+// state it was stopped in, for the worker it was stopped at.
+func TestReleaseJoinsTheEndOfTheUrgentLane(t *testing.T) {
+	q, _, _ := setup(t, `{"items":[
+		{"id":"PA-0001","state":"recorded","lane":"backfill","next":"sextant"},
+		{"id":"PA-0002","state":"recorded","lane":"urgent","next":"sextant"},
+		{"id":"PA-0003","state":"recorded","lane":"normal","next":"sextant"}]}`)
+	if _, err := q.Release(ctx, "countersign", "PA-0001"); err != contract.MoveNotAllowed {
+		t.Errorf("releasing an item that is not stopped: %v", err)
+	}
+	// Stop the backfill item: take the two ahead of it out of the way
+	// first.
+	urgent := must(q.Lease(ctx, "sextant"))(t)
+	normal := must(q.Lease(ctx, "sextant"))(t)
+	g := must(q.Lease(ctx, "sextant"))(t)
+	must(q.Fail(ctx, "sextant", g.Lease, contract.Parse))(t)
+	must(q.Fail(ctx, "sextant", urgent.Lease, contract.Timeout))(t)
+	must(q.Fail(ctx, "sextant", normal.Lease, contract.Timeout))(t)
+
+	ack := must(q.Release(ctx, "countersign", "PA-0001"))(t)
+	if ack.ID != "PA-0001" || ack.State != lifecycle.Recorded || ack.Next != "sextant" || ack.Held {
+		t.Errorf("the release: %+v", ack)
+	}
+	var order []string
+	for {
+		g := must(q.Lease(ctx, "sextant"))(t)
+		if g == nil {
+			break
+		}
+		order = append(order, g.ID+" "+string(g.Lane))
+	}
+	want := "[PA-0002 urgent PA-0001 urgent PA-0003 normal]"
+	if got := fmt.Sprint(order); got != want {
+		t.Errorf("order after release %s, want %s", got, want)
+	}
+	for _, id := range []string{"PA-0009", "EP-0001", "PA-00001", "made-up"} {
+		if _, err := q.Release(ctx, "countersign", id); err == nil {
+			t.Errorf("releasing %q was accepted", id)
+		}
 	}
 }
 

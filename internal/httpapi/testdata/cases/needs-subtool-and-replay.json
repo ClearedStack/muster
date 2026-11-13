@@ -1,5 +1,5 @@
 {
-  "about": "A worker with no rule for an item pauses it. When Shipkeeper reports a new image digest for that worker, every item it paused runs again: back in its old state, in the urgent lane, ahead of everything else.",
+  "about": "A worker with no rule for an item pauses it. Bellbuoy is given one incident step about it. When Shipkeeper reports a new image digest for that worker, every item it paused runs again: back in its old state, in the urgent lane, ahead of everything else.",
   "seed": {
     "items": [
       {
@@ -105,6 +105,46 @@
       }
     },
     {
+      "note": "the incident names the state the item was paused from",
+      "as": "bellbuoy",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "incident:PA-0001.3",
+        "kind": "incident",
+        "id": "PA-0001",
+        "state": "recorded",
+        "lane": "normal",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z",
+        "incident": {
+          "id": "PA-0001",
+          "worker": "sextant",
+          "code": "E_NEEDS_SUBTOOL",
+          "state": "recorded"
+        }
+      }
+    },
+    {
+      "as": "bellbuoy",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "incident:PA-0001.3",
+        "state": "recorded"
+      },
+      "status": 200,
+      "want": {
+        "id": "PA-0001",
+        "state": "recorded"
+      }
+    },
+    {
       "note": "the first digest ever reported is only noted",
       "as": "shipkeeper",
       "method": "POST",
@@ -122,7 +162,8 @@
       "status": 200,
       "want": {
         "received": 1,
-        "replayed": 0
+        "replayed": 0,
+        "live": 0
       }
     },
     {
@@ -143,7 +184,8 @@
       "status": 200,
       "want": {
         "received": 1,
-        "replayed": 0
+        "replayed": 0,
+        "live": 0
       }
     },
     {
@@ -164,7 +206,8 @@
       "status": 200,
       "want": {
         "received": 1,
-        "replayed": 0
+        "replayed": 0,
+        "live": 0
       }
     },
     {
@@ -185,7 +228,8 @@
       "status": 200,
       "want": {
         "received": 1,
-        "replayed": 0
+        "replayed": 0,
+        "live": 0
       }
     },
     {
@@ -206,7 +250,8 @@
       "status": 200,
       "want": {
         "received": 1,
-        "replayed": 2
+        "replayed": 2,
+        "live": 0
       }
     },
     {
@@ -219,7 +264,7 @@
       },
       "status": 200,
       "want": {
-        "lease": "PA-0001.3",
+        "lease": "PA-0001.4",
         "kind": "item",
         "id": "PA-0001",
         "state": "recorded",
@@ -237,7 +282,7 @@
       },
       "status": 200,
       "want": {
-        "lease": "PA-0002.4",
+        "lease": "PA-0002.5",
         "kind": "item",
         "id": "PA-0002",
         "state": "recorded",
@@ -256,7 +301,7 @@
       },
       "status": 200,
       "want": {
-        "lease": "PA-0003.5",
+        "lease": "PA-0003.6",
         "kind": "item",
         "id": "PA-0003",
         "state": "recorded",
@@ -272,7 +317,7 @@
       "path": "/v1/complete",
       "send": {
         "contract": "v1",
-        "lease": "PA-0001.3",
+        "lease": "PA-0001.4",
         "state": "observed"
       },
       "status": 200,
@@ -300,7 +345,33 @@
       "status": 200,
       "want": {
         "received": 1,
-        "replayed": 0
+        "replayed": 0,
+        "live": 0
+      }
+    },
+    {
+      "note": "the second item's incident is still Bellbuoy's to deal with, replayed or not",
+      "as": "bellbuoy",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "incident:PA-0002.7",
+        "kind": "incident",
+        "id": "PA-0002",
+        "state": "recorded",
+        "lane": "normal",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z",
+        "incident": {
+          "id": "PA-0002",
+          "worker": "sextant",
+          "code": "E_NEEDS_SUBTOOL",
+          "state": "recorded"
+        }
       }
     }
   ]
