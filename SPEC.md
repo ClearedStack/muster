@@ -6,7 +6,7 @@
 
 The same text is published at [clearedstack.com/platform/muster/](https://clearedstack.com/platform/muster/). To change the specification, change it here and say why.
 
-Muster (`v0.1.0-draft`, owned by `clearedstack.com`) is the sole read-write gatekeeper in front of Logbook. It coordinates all 10 deterministic workers in `cs-workers`, streams live status to Conn over Server-Sent Events (SSE), and protects anonymous edit intake with a 5-layer anti-spam shield.
+Muster (`v0.1.0-draft`, in the `muster` repository) is the sole read-write gatekeeper in front of Logbook. It coordinates all 10 deterministic workers in `cs-workers`, streams live status to Conn over Server-Sent Events (SSE), and protects anonymous edit intake with a 5-layer anti-spam shield.
 
 ## Overview & Role
 
@@ -25,7 +25,7 @@ Rather than letting 10 worker pods hold database passwords or implement their ow
 | **Namespace** | `clearedstack` (Control Plane) |
 | **Kind** | `control-plane` |
 | **Version** | `v0.1.0-draft` |
-| **Owning Repo** | `clearedstack.com` |
+| **Owning Repo** | `muster` |
 | **RAM Request** | `48 MiB` |
 | **Priority Class** | High (Control Plane — protected from eviction) |
 | **Storage** | Stateless (all durable state lives in Logbook) |

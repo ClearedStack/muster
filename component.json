@@ -11,7 +11,7 @@
     "Live update stream and edit-proposal intake for Conn",
     "Receives health reports from Shipkeeper"
   ],
-  "repository": "clearedstack.com",
+  "repository": "muster",
   "image": "muster",
   "dependsOn": [
     "logbook"
