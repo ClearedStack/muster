@@ -1,0 +1,291 @@
+{
+  "item_states": [
+    "discovered",
+    "recorded",
+    "observed",
+    "screened-out",
+    "scored",
+    "approved",
+    "building",
+    "live",
+    "parked",
+    "linked",
+    "merged",
+    "rejected",
+    "retired",
+    "needs_subtool"
+  ],
+  "item_moves": [
+    {
+      "from": "discovered",
+      "to": "recorded"
+    },
+    {
+      "from": "discovered",
+      "to": "rejected"
+    },
+    {
+      "from": "recorded",
+      "to": "observed"
+    },
+    {
+      "from": "recorded",
+      "to": "needs_subtool"
+    },
+    {
+      "from": "observed",
+      "to": "scored"
+    },
+    {
+      "from": "observed",
+      "to": "screened-out"
+    },
+    {
+      "from": "observed",
+      "to": "needs_subtool"
+    },
+    {
+      "from": "screened-out",
+      "to": "observed"
+    },
+    {
+      "from": "scored",
+      "to": "approved"
+    },
+    {
+      "from": "scored",
+      "to": "parked"
+    },
+    {
+      "from": "scored",
+      "to": "linked"
+    },
+    {
+      "from": "scored",
+      "to": "merged"
+    },
+    {
+      "from": "scored",
+      "to": "rejected"
+    },
+    {
+      "from": "approved",
+      "to": "building"
+    },
+    {
+      "from": "approved",
+      "to": "needs_subtool"
+    },
+    {
+      "from": "building",
+      "to": "live"
+    },
+    {
+      "from": "building",
+      "to": "parked"
+    },
+    {
+      "from": "live",
+      "to": "building"
+    },
+    {
+      "from": "live",
+      "to": "retired"
+    },
+    {
+      "from": "parked",
+      "to": "observed"
+    },
+    {
+      "from": "linked",
+      "to": "observed"
+    },
+    {
+      "from": "merged",
+      "to": "observed"
+    },
+    {
+      "from": "needs_subtool",
+      "to": "recorded"
+    },
+    {
+      "from": "needs_subtool",
+      "to": "observed"
+    },
+    {
+      "from": "needs_subtool",
+      "to": "approved"
+    }
+  ],
+  "proposal_states": [
+    "pending_approval",
+    "approved",
+    "declined",
+    "building",
+    "live"
+  ],
+  "proposal_moves": [
+    {
+      "from": "pending_approval",
+      "to": "approved"
+    },
+    {
+      "from": "pending_approval",
+      "to": "declined"
+    },
+    {
+      "from": "approved",
+      "to": "building"
+    },
+    {
+      "from": "building",
+      "to": "live"
+    }
+  ],
+  "lanes": [
+    "urgent",
+    "normal",
+    "backfill"
+  ],
+  "routes": [
+    {
+      "worker": "trawl",
+      "kind": "item",
+      "from": "discovered",
+      "to": "recorded",
+      "next": "sextant"
+    },
+    {
+      "worker": "trawl",
+      "kind": "item",
+      "from": "discovered",
+      "to": "rejected"
+    },
+    {
+      "worker": "sextant",
+      "kind": "item",
+      "from": "recorded",
+      "to": "observed",
+      "next": "assay"
+    },
+    {
+      "worker": "assay",
+      "kind": "item",
+      "from": "observed",
+      "to": "scored",
+      "next": "countersign"
+    },
+    {
+      "worker": "assay",
+      "kind": "item",
+      "from": "observed",
+      "to": "screened-out",
+      "next": "countersign"
+    },
+    {
+      "worker": "countersign",
+      "kind": "item",
+      "from": "scored",
+      "to": "approved",
+      "next": "waybill"
+    },
+    {
+      "worker": "countersign",
+      "kind": "item",
+      "from": "scored",
+      "to": "parked"
+    },
+    {
+      "worker": "countersign",
+      "kind": "item",
+      "from": "scored",
+      "to": "linked",
+      "next": "chartroom"
+    },
+    {
+      "worker": "countersign",
+      "kind": "item",
+      "from": "scored",
+      "to": "merged",
+      "next": "chartroom"
+    },
+    {
+      "worker": "countersign",
+      "kind": "item",
+      "from": "scored",
+      "to": "rejected"
+    },
+    {
+      "worker": "countersign",
+      "kind": "item",
+      "from": "screened-out",
+      "to": "observed",
+      "next": "assay"
+    },
+    {
+      "worker": "waybill",
+      "kind": "item",
+      "from": "approved",
+      "to": "approved",
+      "next": "moldloft"
+    },
+    {
+      "worker": "moldloft",
+      "kind": "item",
+      "from": "approved",
+      "to": "building",
+      "next": "shakedown"
+    },
+    {
+      "worker": "shakedown",
+      "kind": "item",
+      "from": "building",
+      "to": "building",
+      "next": "chartroom"
+    },
+    {
+      "worker": "shakedown",
+      "kind": "item",
+      "from": "building",
+      "to": "parked"
+    },
+    {
+      "worker": "chartroom",
+      "kind": "item",
+      "from": "building",
+      "to": "live"
+    },
+    {
+      "worker": "chartroom",
+      "kind": "item",
+      "from": "linked",
+      "to": "linked"
+    },
+    {
+      "worker": "chartroom",
+      "kind": "item",
+      "from": "merged",
+      "to": "merged"
+    },
+    {
+      "worker": "countersign",
+      "kind": "proposal",
+      "from": "pending_approval",
+      "to": "approved",
+      "next": "bellbuoy",
+      "lane": "urgent"
+    },
+    {
+      "worker": "countersign",
+      "kind": "proposal",
+      "from": "pending_approval",
+      "to": "declined"
+    },
+    {
+      "worker": "bellbuoy",
+      "kind": "proposal",
+      "from": "approved",
+      "to": "building"
+    }
+  ]
+}

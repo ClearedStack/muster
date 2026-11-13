@@ -1,0 +1,112 @@
+[
+  {
+    "status": 400,
+    "error": "E_PARSE",
+    "reason": "the request could not be read"
+  },
+  {
+    "status": 400,
+    "error": "E_PARSE",
+    "reason": "a required field is missing or malformed"
+  },
+  {
+    "status": 413,
+    "error": "E_PARSE",
+    "reason": "the request is too large"
+  },
+  {
+    "status": 415,
+    "error": "E_PARSE",
+    "reason": "the content type must be application/json"
+  },
+  {
+    "status": 401,
+    "error": "E_PARSE",
+    "reason": "no valid credential was presented"
+  },
+  {
+    "status": 403,
+    "error": "E_PARSE",
+    "reason": "this caller may not make this call"
+  },
+  {
+    "status": 404,
+    "error": "E_PARSE",
+    "reason": "no such call"
+  },
+  {
+    "status": 405,
+    "error": "E_PARSE",
+    "reason": "this call does not accept that method"
+  },
+  {
+    "status": 409,
+    "error": "E_PARSE",
+    "reason": "the lease is not held"
+  },
+  {
+    "status": 409,
+    "error": "E_PARSE",
+    "reason": "that move is not allowed"
+  },
+  {
+    "status": 400,
+    "error": "E_PARSE",
+    "reason": "report a missing rule with the needs_subtool call"
+  },
+  {
+    "status": 400,
+    "error": "E_PARSE",
+    "reason": "the proof of work is not valid"
+  },
+  {
+    "status": 400,
+    "error": "E_PARSE",
+    "reason": "the target is not in the ownership map"
+  },
+  {
+    "status": 400,
+    "error": "E_PARSE",
+    "reason": "nothing is left of the proposal once markup is removed"
+  },
+  {
+    "status": 500,
+    "error": "E_PARSE",
+    "reason": "a stored record was not consistent and has been set aside"
+  },
+  {
+    "status": 500,
+    "error": "E_PARSE",
+    "reason": "an unexpected condition; the request was refused"
+  },
+  {
+    "status": 422,
+    "error": "E_NEEDS_SUBTOOL",
+    "reason": "this contract version is not known"
+  },
+  {
+    "status": 422,
+    "error": "E_NEEDS_SUBTOOL",
+    "reason": "this health state is not known"
+  },
+  {
+    "status": 503,
+    "error": "E_TIMEOUT",
+    "reason": "the record store took too long"
+  },
+  {
+    "status": 503,
+    "error": "E_TIMEOUT",
+    "reason": "the identity check took too long"
+  },
+  {
+    "status": 503,
+    "error": "E_TIMEOUT",
+    "reason": "too busy; try again"
+  },
+  {
+    "status": 429,
+    "error": "E_TIMEOUT",
+    "reason": "too many submissions from this source today; try again tomorrow"
+  }
+]

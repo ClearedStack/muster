@@ -1,0 +1,4 @@
+/muster
+/dist/
+*.test
+*.out
