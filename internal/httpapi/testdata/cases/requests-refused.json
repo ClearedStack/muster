@@ -129,7 +129,7 @@
       "path": "/v1/complete",
       "send": {
         "contract": "v1",
-        "lease": "PA-0001.1",
+        "lease": "PA-0001.999.1",
         "state": "observed",
         "result": [
           1,
@@ -150,7 +150,7 @@
       "path": "/v1/complete",
       "send": {
         "contract": "v1",
-        "lease": "PA-0001.1"
+        "lease": "PA-0001.999.1"
       },
       "status": 400,
       "want": {
@@ -169,7 +169,7 @@
       },
       "status": 200,
       "want": {
-        "lease": "PA-0001.1",
+        "lease": "PA-0001.1.1",
         "kind": "item",
         "id": "PA-0001",
         "state": "recorded",

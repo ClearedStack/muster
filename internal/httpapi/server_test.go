@@ -65,16 +65,16 @@ func TestBodySizeLimits(t *testing.T) {
 			"result": map[string]string{"text": strings.Repeat("x", pad)},
 		}))
 	}
-	if p := refusalOf(t, complete("sextant", "PA-0001.1", "observed", httpapi.MaxBody)); p != contract.TooLarge {
+	if p := refusalOf(t, complete("sextant", "PA-0001.1.1", "observed", httpapi.MaxBody)); p != contract.TooLarge {
 		t.Errorf("an oversized call from Sextant: %v", p)
 	}
-	if rec := complete("sextant", "PA-0001.1", "observed", httpapi.MaxBody-200); rec.Code != http.StatusOK {
+	if rec := complete("sextant", "PA-0001.1.1", "observed", httpapi.MaxBody-200); rec.Code != http.StatusOK {
 		t.Errorf("a call from Sextant just inside the limit: %d %s", rec.Code, rec.Body)
 	}
-	if p := refusalOf(t, complete("waybill", "PA-0002.2", "approved", httpapi.MaxWaybillBody)); p != contract.TooLarge {
+	if p := refusalOf(t, complete("waybill", "PA-0002.2.1", "approved", httpapi.MaxWaybillBody)); p != contract.TooLarge {
 		t.Errorf("an oversized call from Waybill: %v", p)
 	}
-	if rec := complete("waybill", "PA-0002.2", "approved", httpapi.MaxWaybillBody-200); rec.Code != http.StatusOK {
+	if rec := complete("waybill", "PA-0002.2.1", "approved", httpapi.MaxWaybillBody-200); rec.Code != http.StatusOK {
 		t.Errorf("a call from Waybill just inside its limit: %d %s", rec.Code, rec.Body)
 	}
 	// The larger limit is for Waybill's complete and nothing else.
@@ -84,7 +84,7 @@ func TestBodySizeLimits(t *testing.T) {
 			t.Errorf("%s from Waybill: %v", path, p)
 		}
 	}
-	for path, as := range map[string]string{"/v1/items": "trawl", "/v1/health": "shipkeeper", "/v1/edits": "conn"} {
+	for path, as := range map[string]string{"/v1/items": "trawl", "/v1/release": "countersign", "/v1/health": "shipkeeper", "/v1/edits": "conn"} {
 		if p := refusalOf(t, s.do(t, post(path, as, big))); p != contract.TooLarge {
 			t.Errorf("%s: %v", path, p)
 		}
@@ -109,11 +109,12 @@ func TestSlowStoreIsATimeout(t *testing.T) {
 	example := readCase(t, "edits-accepted")
 	calls := []step{
 		post("/v1/lease", "sextant", map[string]string{"contract": "v1"}),
-		post("/v1/heartbeat", "sextant", map[string]string{"contract": "v1", "lease": "PA-0001.1"}),
-		post("/v1/complete", "sextant", map[string]string{"contract": "v1", "lease": "PA-0001.1", "state": "observed"}),
-		post("/v1/fail", "sextant", map[string]string{"contract": "v1", "lease": "PA-0001.1", "code": "E_PARSE"}),
-		post("/v1/needs_subtool", "sextant", map[string]string{"contract": "v1", "lease": "PA-0001.1"}),
+		post("/v1/heartbeat", "sextant", map[string]string{"contract": "v1", "lease": "PA-0001.1.1"}),
+		post("/v1/complete", "sextant", map[string]string{"contract": "v1", "lease": "PA-0001.1.1", "state": "observed"}),
+		post("/v1/fail", "sextant", map[string]string{"contract": "v1", "lease": "PA-0001.1.1", "code": "E_PARSE"}),
+		post("/v1/needs_subtool", "sextant", map[string]string{"contract": "v1", "lease": "PA-0001.1.1"}),
 		post("/v1/health", "shipkeeper", map[string]any{"contract": "v1", "reports": []map[string]string{{"component": "sextant", "state": "healthy"}}}),
+		post("/v1/release", "countersign", map[string]string{"contract": "v1", "id": "PA-0001"}),
 		post("/v1/items", "trawl", map[string]string{"contract": "v1", "source": "sam-gov", "title": "A made-up title", "address": "https://example.org/made-up"}),
 		example.Steps[0],
 		{Method: http.MethodGet, Path: "/v1/feed", As: "conn"},
@@ -162,7 +163,7 @@ func TestSourceAddressIsNeverKept(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	enc.Encode(s.store.Ledger())
+	enc.Encode(s.mem.Ledger())
 	for _, address := range []string{"203.0.113.7", "2001:db8::7", "203.0.113", "2001:db8"} {
 		if strings.Contains(dump.String(), address) {
 			t.Errorf("the records hold the source address %s:\n%s", address, dump.String())
@@ -266,7 +267,7 @@ func TestFeedOverHTTP(t *testing.T) {
 
 	// Countersign approves it: the status change is on the next batch.
 	s.do(t, post("/v1/lease", "countersign", map[string]string{"contract": "v1"}))
-	if rec := s.do(t, post("/v1/complete", "countersign", map[string]string{"contract": "v1", "lease": "EP-0001.2", "state": "approved"})); rec.Code != http.StatusOK {
+	if rec := s.do(t, post("/v1/complete", "countersign", map[string]string{"contract": "v1", "lease": "EP-0001.2.1", "state": "approved"})); rec.Code != http.StatusOK {
 		t.Fatal(rec.Body)
 	}
 	s.clock.Advance(5 * time.Second)
@@ -309,7 +310,7 @@ func (b blocking) Update(ctx context.Context, fn func(logbook.Tx) error) error {
 // try again; it is not queued, so a flood cannot grow memory.
 func TestBusyLimit(t *testing.T) {
 	s := newStack(t, oneItem())
-	gate := blocking{s.store, make(chan struct{}, httpapi.MaxInFlight), make(chan struct{})}
+	gate := blocking{s.mem, make(chan struct{}, httpapi.MaxInFlight), make(chan struct{})}
 	s.server.Queue.Store = gate
 	lease := post("/v1/lease", "tidegauge", map[string]string{"contract": "v1"})
 

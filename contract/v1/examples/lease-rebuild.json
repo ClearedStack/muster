@@ -1,17 +1,16 @@
 {
-  "about": "Countersign is given a release step: an item a worker stopped with E_PARSE, in the state it is held in, with the worker and the code under results.held.",
+  "about": "Waybill is given a live item that Tidegauge sent back to building because a cited source changed.",
   "given": {
     "items": [
       {
         "id": "PA-0001",
-        "state": "recorded",
-        "lane": "normal",
-        "next": "sextant"
+        "state": "live",
+        "lane": "normal"
       }
     ],
     "calls": [
       {
-        "as": "sextant",
+        "as": "tidegauge",
         "method": "POST",
         "path": "/v1/lease",
         "body": {
@@ -19,19 +18,22 @@
         }
       },
       {
-        "as": "sextant",
+        "as": "tidegauge",
         "method": "POST",
-        "path": "/v1/fail",
+        "path": "/v1/complete",
         "body": {
           "contract": "v1",
-          "lease": "PA-0001.1",
-          "code": "E_PARSE"
+          "lease": "PA-0001.1.1",
+          "state": "building",
+          "result": {
+            "changed": "made-up source"
+          }
         }
       }
     ]
   },
   "request": {
-    "as": "countersign",
+    "as": "waybill",
     "method": "POST",
     "path": "/v1/lease",
     "body": {
@@ -41,17 +43,16 @@
   "expect": {
     "status": 200,
     "body": {
-      "lease": "release:PA-0001.2",
-      "kind": "release",
+      "lease": "PA-0001.2.1",
+      "kind": "item",
       "id": "PA-0001",
-      "state": "recorded",
-      "lane": "normal",
+      "state": "building",
+      "lane": "urgent",
       "attempt": 1,
       "expires": "2026-01-05T09:01:00Z",
       "results": {
-        "held": {
-          "worker": "sextant",
-          "code": "E_PARSE"
+        "tidegauge": {
+          "changed": "made-up source"
         }
       }
     }

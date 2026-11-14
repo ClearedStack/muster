@@ -26,7 +26,7 @@
     "path": "/v1/fail",
     "body": {
       "contract": "v1",
-      "lease": "PA-0001.1",
+      "lease": "PA-0001.1.1",
       "code": "E_NEEDS_SUBTOOL"
     }
   },

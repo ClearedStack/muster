@@ -21,7 +21,9 @@ import (
 	"github.com/ClearedStack/muster/internal/health"
 	"github.com/ClearedStack/muster/internal/httpapi"
 	"github.com/ClearedStack/muster/internal/intake"
+	"github.com/ClearedStack/muster/internal/logbook"
 	"github.com/ClearedStack/muster/internal/logbook/memory"
+	"github.com/ClearedStack/muster/internal/logbook/sql/sqltest"
 	"github.com/ClearedStack/muster/internal/queue"
 )
 
@@ -85,21 +87,46 @@ func (c *clock) Advance(d time.Duration) {
 
 type stack struct {
 	clock  *clock
-	store  *memory.Store
+	store  logbook.Store
+	mem    *memory.Store    // the stand-in, when that is the store
+	book   *sqltest.Logbook // a real Logbook, when that is the store
 	hub    *feed.Hub
 	server *httpapi.Server
 	tokens map[string]string // caller name to its made-up token
 }
 
+// newStack builds Muster on the in-memory stand-in for Logbook.
 func newStack(t *testing.T, seed *memory.Seed) *stack {
 	t.Helper()
 	clk := &clock{t: start}
-	store := memory.New()
+	mem := memory.New()
 	if seed != nil {
-		if err := store.Load(*seed); err != nil {
+		if err := mem.Load(*seed); err != nil {
 			t.Fatalf("seed: %v", err)
 		}
 	}
+	s := build(t, clk, mem)
+	s.mem = mem
+	return s
+}
+
+// newStackOnLogbook builds Muster on a real Logbook: a PostgreSQL
+// database of the test's own, with Logbook's migrations applied. The
+// test is skipped when no test database is given.
+func newStackOnLogbook(t *testing.T, seed *memory.Seed) *stack {
+	t.Helper()
+	clk := &clock{t: start}
+	book := sqltest.New(t, clk.Now)
+	if seed != nil {
+		book.Seed(t, *seed, start)
+	}
+	s := build(t, clk, book.Store)
+	s.book = book
+	return s
+}
+
+func build(t *testing.T, clk *clock, store logbook.Store) *stack {
+	t.Helper()
 	callers := readFile(t, "testdata/callers.json")
 	table, err := auth.ParseTable(callers)
 	if err != nil {
@@ -200,6 +227,7 @@ func TestSavedExamples(t *testing.T) {
 				t.Fatalf("%s: every example says what it is about", path)
 			}
 			s := newStack(t, cf.Seed)
+			var granted []string
 			for i := range cf.Steps {
 				st := &cf.Steps[i]
 				if st.Wait != "" {
@@ -211,9 +239,11 @@ func TestSavedExamples(t *testing.T) {
 				}
 				if *update {
 					solve(t, st, s.clock.Now())
+					st.Send = realLeases(st.Send, granted)
 				}
 				rec := s.do(t, *st)
 				got := rec.Body.Bytes()
+				granted = noteLease(granted, st.Path, rec)
 				if *update {
 					st.Status = rec.Code
 					st.Want = nil
@@ -314,4 +344,39 @@ func solve(t *testing.T, st *step, now time.Time) {
 			return
 		}
 	}
+}
+
+// The scripts that draft the saved examples name a lease by its place in
+// the story: PA-0001.2 for the second lease granted. When an example is
+// written (with -update) that shorthand is replaced by the lease Muster
+// really gave, and a lease that was never granted by one that never
+// could be. After that the file holds real leases only.
+var shortLease = regexp.MustCompile(`"lease":\s*"((?:incident:)?[A-Z]{2}-[0-9]+)\.([0-9]+)"`)
+
+func realLeases(send json.RawMessage, granted []string) json.RawMessage {
+	if send == nil {
+		return send
+	}
+	return shortLease.ReplaceAllFunc(send, func(m []byte) []byte {
+		parts := shortLease.FindSubmatch(m)
+		n := 0
+		fmt.Sscanf(string(parts[2]), "%d", &n)
+		if n >= 1 && n <= len(granted) && strings.HasPrefix(granted[n-1], string(parts[1])+".") {
+			return []byte(`"lease": "` + granted[n-1] + `"`)
+		}
+		return []byte(`"lease": "` + string(parts[1]) + `.999.1"`)
+	})
+}
+
+func noteLease(granted []string, path string, rec *httptest.ResponseRecorder) []string {
+	if path != "/v1/lease" || rec.Code != 200 {
+		return granted
+	}
+	var g struct {
+		Lease string `json:"lease"`
+	}
+	if json.Unmarshal(rec.Body.Bytes(), &g) == nil && g.Lease != "" {
+		granted = append(granted, g.Lease)
+	}
+	return granted
 }

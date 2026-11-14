@@ -26,7 +26,7 @@
       },
       "status": 200,
       "want": {
-        "lease": "PA-0001.1",
+        "lease": "PA-0001.1.1",
         "kind": "item",
         "id": "PA-0001",
         "state": "recorded",
@@ -41,7 +41,7 @@
       "path": "/v1/fail",
       "send": {
         "contract": "v1",
-        "lease": "PA-0001.1",
+        "lease": "PA-0001.1.1",
         "code": "E_TIMEOUT"
       },
       "status": 200,
@@ -58,7 +58,7 @@
       "path": "/v1/fail",
       "send": {
         "contract": "v1",
-        "lease": "PA-0001.1",
+        "lease": "PA-0001.1.1",
         "code": "E_TIMEOUT"
       },
       "status": 200,
@@ -78,7 +78,7 @@
       },
       "status": 200,
       "want": {
-        "lease": "PA-0001.2",
+        "lease": "PA-0001.1.2",
         "kind": "item",
         "id": "PA-0001",
         "state": "recorded",
@@ -94,7 +94,7 @@
       "path": "/v1/fail",
       "send": {
         "contract": "v1",
-        "lease": "PA-0001.1",
+        "lease": "PA-0001.1.1",
         "code": "E_TIMEOUT"
       },
       "status": 200,
@@ -110,11 +110,11 @@
       "path": "/v1/heartbeat",
       "send": {
         "contract": "v1",
-        "lease": "PA-0001.2"
+        "lease": "PA-0001.1.2"
       },
       "status": 200,
       "want": {
-        "lease": "PA-0001.2",
+        "lease": "PA-0001.1.2",
         "expires": "2026-01-05T09:01:00Z"
       }
     }

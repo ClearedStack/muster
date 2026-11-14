@@ -86,14 +86,13 @@ func (s *Store) Load(seed Seed) error {
 				Kind:    lifecycle.KindItem,
 				Worker:  next,
 				Lane:    lane,
-				Arrival: tx.Next(logbook.CounterArrival),
 			})
 		}
 		// New items are numbered after the highest one in the seed.
 		t := tx.(*txn)
-		if old := s.counters[logbook.CounterItem]; highest > old {
-			t.undo = append(t.undo, func() { s.counters[logbook.CounterItem] = old })
-			s.counters[logbook.CounterItem] = highest
+		if old := s.counters[counterItem]; highest > old {
+			t.undo = append(t.undo, func() { s.counters[counterItem] = old })
+			s.counters[counterItem] = highest
 		}
 		return nil
 	})

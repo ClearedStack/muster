@@ -32,7 +32,7 @@
       },
       "status": 200,
       "want": {
-        "lease": "PA-0001.1",
+        "lease": "PA-0001.1.1",
         "kind": "item",
         "id": "PA-0001",
         "state": "recorded",
@@ -48,7 +48,7 @@
       "path": "/v1/needs_subtool",
       "send": {
         "contract": "v1",
-        "lease": "PA-0001.1"
+        "lease": "PA-0001.1.1"
       },
       "status": 200,
       "want": {
@@ -63,7 +63,7 @@
       "path": "/v1/needs_subtool",
       "send": {
         "contract": "v1",
-        "lease": "PA-0001.1"
+        "lease": "PA-0001.1.1"
       },
       "status": 200,
       "want": {
@@ -81,7 +81,7 @@
       },
       "status": 200,
       "want": {
-        "lease": "PA-0002.2",
+        "lease": "PA-0002.2.1",
         "kind": "item",
         "id": "PA-0002",
         "state": "recorded",
@@ -96,7 +96,7 @@
       "path": "/v1/needs_subtool",
       "send": {
         "contract": "v1",
-        "lease": "PA-0002.2"
+        "lease": "PA-0002.2.1"
       },
       "status": 200,
       "want": {
@@ -114,7 +114,7 @@
       },
       "status": 200,
       "want": {
-        "lease": "incident:PA-0001.3",
+        "lease": "incident:PA-0001.4.1",
         "kind": "incident",
         "id": "PA-0001",
         "state": "recorded",
@@ -135,7 +135,7 @@
       "path": "/v1/complete",
       "send": {
         "contract": "v1",
-        "lease": "incident:PA-0001.3",
+        "lease": "incident:PA-0001.4.1",
         "state": "recorded"
       },
       "status": 200,
@@ -264,7 +264,7 @@
       },
       "status": 200,
       "want": {
-        "lease": "PA-0001.4",
+        "lease": "PA-0001.6.1",
         "kind": "item",
         "id": "PA-0001",
         "state": "recorded",
@@ -282,7 +282,7 @@
       },
       "status": 200,
       "want": {
-        "lease": "PA-0002.5",
+        "lease": "PA-0002.7.1",
         "kind": "item",
         "id": "PA-0002",
         "state": "recorded",
@@ -301,7 +301,7 @@
       },
       "status": 200,
       "want": {
-        "lease": "PA-0003.6",
+        "lease": "PA-0003.3.1",
         "kind": "item",
         "id": "PA-0003",
         "state": "recorded",
@@ -317,7 +317,7 @@
       "path": "/v1/complete",
       "send": {
         "contract": "v1",
-        "lease": "PA-0001.4",
+        "lease": "PA-0001.6.1",
         "state": "observed"
       },
       "status": 200,
@@ -359,7 +359,7 @@
       },
       "status": 200,
       "want": {
-        "lease": "incident:PA-0002.7",
+        "lease": "incident:PA-0002.5.1",
         "kind": "incident",
         "id": "PA-0002",
         "state": "recorded",

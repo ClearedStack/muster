@@ -71,8 +71,13 @@ The queue holds, for each item, at most one step of its own: the next thing to d
 | Chartroom | `retired` | `retired` (retirement listed) | none |
 | Tidegauge | `live` | `live` (checked, nothing changed) | Tidegauge, in the `backfill` lane, 7 days later |
 | Tidegauge | `live` | `retired` | Chartroom, in the `urgent` lane |
+| Tidegauge | `live` | `building` (a cited source changed) | Waybill, in the `urgent` lane |
+| Waybill | `building` | `building` (specification rewritten) | Moldloft |
+| Moldloft | `building` | `building` (tool regenerated) | Shakedown |
 
 A worker may complete only its own rows. A step marked "7 days later" is not offered, and is not counted as waiting, until seven days have passed. That is how every live item comes back to Tidegauge for a check every seven days.
+
+A check ends one of three ways. Nothing changed: the item stays `live` and the next check is set. A cited source changed: the item goes back to `building`, and Waybill, Moldloft, Shakedown and Chartroom rebuild and relist it as they built it the first time. The rule was repealed: the item is `retired`.
 
 ## Who may call what
 
@@ -82,6 +87,7 @@ Every caller presents its Kubernetes ServiceAccount token as a bearer token. Mus
 | --- | --- |
 | `POST /v1/lease`, `/v1/heartbeat`, `/v1/complete`, `/v1/fail`, `/v1/needs_subtool` | any of the ten workers |
 | `POST /v1/items` | `trawl`, `conn` |
+| `POST /v1/release` | `countersign` |
 | `POST /v1/health` | `shipkeeper` |
 | `POST /v1/edits`, `GET /v1/feed` | `conn` |
 | `GET /healthz` | anyone; no token |
@@ -90,19 +96,21 @@ Every caller presents its Kubernetes ServiceAccount token as a bearer token. Mus
 
 | Call | Request | Answer |
 | --- | --- | --- |
-| `POST /v1/lease` | `contract` | `200` with `lease`, `kind`, `id`, `state`, `lane`, `attempt`, `expires`, and what the step is about: `found` and `results` for an item or a release, `proposal` and `results` for a proposal, `incident` for an incident. `204` when there is nothing for this worker. |
+| `POST /v1/lease` | `contract` | `200` with `lease`, `kind`, `id`, `state`, `lane`, `attempt`, `expires`, and what the step is about: `found` and `results` for an item, `proposal` and `results` for a proposal, `incident` for an incident. `204` when there is nothing for this worker. |
 | `POST /v1/heartbeat` | `contract`, `lease` | `200` with `lease` and the new `expires` |
-| `POST /v1/complete` | `contract`, `lease`, `state`, optional `result` (a JSON object) | `200` with `id`, `state`, and `next` (the worker whose step follows, if any) or `held` |
+| `POST /v1/complete` | `contract`, `lease`, `state`, optional `result` (a JSON object) | `200` with `id`, `state` and `next` (the worker whose step follows, if any) |
 | `POST /v1/fail` | `contract`, `lease`, `code` (`E_TIMEOUT` or `E_PARSE`) | `200` with `id`, `state`, and `next` or `held` |
 | `POST /v1/needs_subtool` | `contract`, `lease` | `200` with `id` and `state` |
 
-- **Kinds.** `kind` is `item`, `proposal`, `incident` or `release`, and says what the step is about.
+- **Kinds.** `kind` is `item`, `proposal` or `incident`, and says what the step is about.
 - **Found.** A lease on an item that was recorded through `POST /v1/items` carries `found`: its `source`, `title` and `address`, as they were recorded.
 - **Results.** `complete` takes an optional `result`, a JSON object, for items and proposals alike. Each worker's result is kept under that worker's name, and every later worker is given all of them: a lease on an item carries `results.trawl`, `results.sextant` and so on, and a lease on a proposal carries `results.countersign` once Countersign has given one. A worker that completes a second step on the same item replaces its own earlier result and no one else's. A `complete` with no `result` leaves the results as they are.
+- **Evaluations and decisions.** Logbook keeps a record of each evaluation and of each decision the owner makes on one, and checks both. A result from Assay that has `gates` is recorded as an evaluation: `profile`, `gates`, `factors`, `score`, `recommendation` and `split_flag`, in the form Logbook's specification gives. When Countersign completes an item that has an evaluation, the move is recorded as the owner's decision, with `result.reason` as the reason. Logbook refuses an evaluation that is not well formed, and a decision that goes against the recommendation without a reason; the `complete` is then refused with `bad_field` and nothing changes.
+- **Lease names.** `lease` is a string to hand back as it was given. It names the step, the step's place in the order of arrival, and the attempt: `PA-0001.7.2` is the second attempt at the step that arrived seventh.
 - **Leases.** A lease lasts 60 seconds unless configured otherwise. A heartbeat moves its end to one lease length from now. When a lease runs out the step is offered again, and from then on the worker that lost it is refused. Until someone else takes the step, a late lease still counts, so a finished result that arrives late is kept.
 - **Repeats.** A worker repeats a call until it is acknowledged. Repeating the call that ended a lease gives the same answer and does nothing twice.
 - **`fail` with `E_TIMEOUT`.** The step stays in the queue, in its place, to be tried again.
-- **`fail` with `E_PARSE`.** Work on that item stops. It keeps its state and is not offered again until the owner releases it. Bellbuoy is given an incident step and Countersign a release step.
+- **`fail` with `E_PARSE`.** Work on that item stops. It keeps its state and is not offered again until the owner releases it. Bellbuoy is given an incident step.
 - **`needs_subtool`.** Allowed only where the state table allows it. The item moves to `needs_subtool` and leaves the queue, remembering the state it was in and the worker that paused it. Bellbuoy is given an incident step.
 - **Replay.** When Shipkeeper reports an image digest for a worker that differs from the last digest recorded for it, every item that worker paused returns to the state it was paused from, in the `urgent` lane, in the order the items were paused. The first digest ever reported for a worker is only recorded.
 - **Size.** A request body may be at most 64 KiB. The one exception is `complete` from Waybill, which carries a whole specification and may be at most 256 KiB.
@@ -121,42 +129,9 @@ An incident step changes no state. Bellbuoy completes it with the same `state` i
 
 An item whose stored record contradicts the tables is set aside in the same way, with `code` `E_PARSE`, and gets an incident step too.
 
-An item stopped by `E_PARSE` also gets a release step for Countersign; see **Release steps**. A paused item does not: it runs again by itself when its worker is redeployed.
+## Release
 
-## Release steps
-
-An item that is stopped by `E_PARSE` is held: it keeps its state and its own step is not offered to anyone. It also gets one release step for Countersign, in the `normal` lane, so that the owner can decide whether it runs again.
-
-Countersign leases the release step like any other. The lease has `kind` `release`, the item as `id`, the state the item is held in as `state`, and `results.held`, which names the worker that stopped and the code it gave:
-
-```json
-{
-  "lease": "release:PA-0001.2",
-  "kind": "release",
-  "id": "PA-0001",
-  "state": "recorded",
-  "lane": "normal",
-  "attempt": 1,
-  "expires": "2026-01-05T09:01:00Z",
-  "results": {"held": {"worker": "sextant", "code": "E_PARSE"}}
-}
-```
-
-`results` also carries whatever earlier workers found, under their names, and the lease carries `found` if the item was recorded through `POST /v1/items`.
-
-Countersign ends the step with `POST /v1/complete`, giving the same `state` it was given and the owner's decision as the `result`:
-
-| `result` | What happens | Answer |
-| --- | --- | --- |
-| `{"decision": "release"}` | The item's own step goes back to the worker it was for, at the end of the `urgent` lane. The item keeps the state it was held in | `200` with `id`, `state` and `next`, the worker it goes back to |
-| `{"decision": "keep"}` | The item stays held. The release step ends, and nothing offers the item again | `200` with `id`, `state` and `"held": true` |
-
-- A `state` other than the one given is refused with `move_not_allowed`.
-- A `result` that is missing is refused with `missing_field`. One that has no `decision`, a decision other than these two, or any other field is refused with `bad_field`.
-- The decision is written to the ledger. It is not kept as `results.countersign`, so it does not replace what Countersign decided about the item earlier.
-- A release step can be failed with `E_TIMEOUT`, which puts it back in the queue. It cannot be paused.
-
-An item whose stored record contradicts the tables is held in the same way and gets a release step too.
+`POST /v1/release` with `contract` and `id` carries the owner's decision to let a stopped item run again. Countersign makes the call. The item keeps the state it was stopped in, and its step goes back to the worker it was for, at the end of the `urgent` lane. The answer is `200` with `id`, `state` and `next`. An item that is not stopped is refused with `move_not_allowed`.
 
 ## Recording a candidate
 
@@ -166,8 +141,8 @@ An item whose stored record contradicts the tables is held in the same way and g
 | --- | --- |
 | `contract` | `v1` |
 | `source` | where it was found: `sam-gov`, `github-issues`, `web-sweep` or `site-form` |
-| `title` | at most 200 characters, one line; markup is stripped |
-| `address` | at most 2,000 characters, with no white space |
+| `title` | at most 200 bytes, one line; markup is stripped |
+| `address` | at most 2,000 bytes, with no white space |
 | `result` | optional JSON object; kept as the caller's result, `results.trawl` or `results.conn` |
 | `pow`, `visitor` | only with `site-form`, and required with it: the puzzle token and the visitor's address |
 
@@ -192,7 +167,7 @@ A refusal is an HTTP status and a body with exactly three fields:
 | `400` | `not_json` | `E_PARSE` | The body is not one JSON value |
 | `400` | `unknown_field` | `E_PARSE` | The body has a field the call does not define |
 | `400` | `missing_field` | `E_PARSE` | A required field is missing or empty |
-| `400` | `bad_field` | `E_PARSE` | A field has the wrong type or form: a value that is not allowed, an invalid proof of work, a target that is not in the ownership map, text with nothing left once markup is removed |
+| `400` | `bad_field` | `E_PARSE` | A field has the wrong type or form: a value that is not allowed, an invalid proof of work, a target that is not in the ownership map, text with nothing left once markup is removed, or a row that Logbook's own check refuses |
 | `401` | `no_credential` | `E_PARSE` | No valid token |
 | `403` | `not_your_call` | `E_PARSE` | A caller making a call that is not its own |
 | `404` | `no_such_call` | `E_PARSE` | No such path |
@@ -203,7 +178,7 @@ A refusal is an HTTP status and a body with exactly three fields:
 | `409` | `move_not_allowed` | `E_PARSE` | The tables do not allow the move, or it is not this worker's to make |
 | `409` | `duplicate` | `E_PARSE` | One batch of health reports names the same component twice |
 | `422` | `unknown_contract` | `E_NEEDS_SUBTOOL` | A contract version Muster does not know |
-| `422` | `unknown_value` | `E_NEEDS_SUBTOOL` | A health state or a source Muster does not know |
+| `422` | `unknown_value` | `E_NEEDS_SUBTOOL` | A health state or a source Muster does not know, or a value Logbook has no rule for |
 | `429` | `rate_limited` | `E_TIMEOUT` | Too many submissions from one visitor today |
 | `503` | `store_slow` | `E_TIMEOUT` | Logbook took too long |
 | `503` | `busy` | `E_TIMEOUT` | Too many calls at once, or the identity check took too long |
@@ -247,7 +222,7 @@ Conn calls `POST /v1/edits` with `contract`, `target`, `change`, `reason`, `pow`
 4. **Shape and size.** The whole request may be at most 4,096 bytes. `target` must be in `ownership_map.json`. Markup is stripped from `change` and `reason`: comments, `script` and `style` elements with their contents, and anything shaped like a tag. If nothing is left of `change`, the proposal is refused.
 5. **Review gate.** The proposal is kept as `pending_approval`, given the next identifier, and queued for Countersign. The answer is `202` with `id` and `status`.
 
-`ownership_map.json` has the form `{"elements": {"<target>": {"repository": "...", "file": "...", "kind": "DATA"}}}`. `repository` must be a repository in the naming registry and `kind` one of `DATA`, `CONFIG` and `ISSUE`.
+`ownership_map.json` has the form `{"elements": {"<target>": {"repository": "...", "file": "...", "kind": "DATA"}}}`. A target is a name of at most 100 bytes in the form Logbook keeps for an element: lower-case words joined by full stops, hyphens or underscores, such as `catalog.sample-calculator.description`. `repository` must be a repository in the naming registry and `kind` one of `DATA`, `CONFIG` and `ISSUE`.
 
 ## Proposal steps
 

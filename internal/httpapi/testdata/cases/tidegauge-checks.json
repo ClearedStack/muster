@@ -20,7 +20,7 @@
       },
       "status": 200,
       "want": {
-        "lease": "PA-0001.1",
+        "lease": "PA-0001.1.1",
         "kind": "item",
         "id": "PA-0001",
         "state": "building",
@@ -35,7 +35,7 @@
       "path": "/v1/complete",
       "send": {
         "contract": "v1",
-        "lease": "PA-0001.1",
+        "lease": "PA-0001.1.1",
         "state": "live"
       },
       "status": 200,
@@ -77,7 +77,7 @@
       },
       "status": 200,
       "want": {
-        "lease": "PA-0001.2",
+        "lease": "PA-0001.2.1",
         "kind": "item",
         "id": "PA-0001",
         "state": "live",
@@ -93,7 +93,7 @@
       "path": "/v1/complete",
       "send": {
         "contract": "v1",
-        "lease": "PA-0001.2",
+        "lease": "PA-0001.2.1",
         "state": "live",
         "result": {
           "checked": "made-up source"
@@ -126,7 +126,7 @@
       },
       "status": 200,
       "want": {
-        "lease": "PA-0001.3",
+        "lease": "PA-0001.3.1",
         "kind": "item",
         "id": "PA-0001",
         "state": "live",
@@ -141,30 +141,13 @@
       }
     },
     {
-      "note": "the state table allows live to building, and no queue step is defined for it yet",
-      "as": "tidegauge",
-      "method": "POST",
-      "path": "/v1/complete",
-      "send": {
-        "contract": "v1",
-        "lease": "PA-0001.3",
-        "state": "building"
-      },
-      "status": 409,
-      "want": {
-        "error": "E_PARSE",
-        "cause": "move_not_allowed",
-        "reason": "that move is not allowed"
-      }
-    },
-    {
       "note": "the rule was repealed",
       "as": "tidegauge",
       "method": "POST",
       "path": "/v1/complete",
       "send": {
         "contract": "v1",
-        "lease": "PA-0001.3",
+        "lease": "PA-0001.3.1",
         "state": "retired"
       },
       "status": 200,
@@ -184,7 +167,7 @@
       },
       "status": 200,
       "want": {
-        "lease": "PA-0001.4",
+        "lease": "PA-0001.4.1",
         "kind": "item",
         "id": "PA-0001",
         "state": "retired",
@@ -205,7 +188,7 @@
       "path": "/v1/complete",
       "send": {
         "contract": "v1",
-        "lease": "PA-0001.4",
+        "lease": "PA-0001.4.1",
         "state": "retired"
       },
       "status": 200,

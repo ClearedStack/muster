@@ -72,7 +72,7 @@ The calls, the states, the queue and the refusals are defined in [`contract/v1/C
 
 These could not be settled from the published pages or the contract. The build does not guess at them; the README lists each as not yet done.
 
-1. **Four of Tidegauge's moves.** Every live item now comes to Tidegauge for a check every seven days, and a check can leave it live or retire it. The other moves in the state table have no next worker: `live` to `building`, and `parked`, `linked` or `merged` back to `observed`. Nothing says which worker follows, or how Tidegauge comes to hold a parked, linked or merged item.
+1. **Three of Tidegauge's moves.** Every live item comes to Tidegauge for a check every seven days, and a check can leave it live, send it back to be rebuilt or retire it. Three moves in the state table still have no next worker: `parked`, `linked` or `merged` back to `observed`. Nothing says how Tidegauge comes to hold such an item, or which worker follows.
 2. **Which worker pauses a `recorded` item.** The lifecycle table says intake has no rule for the source, which points at Trawl, but Trawl holds items in `discovered`, which has no move to `needs_subtool`. The build follows the state table: Sextant can pause a `recorded` item and Trawl cannot pause anything.
 3. **Health states.** Shipkeeper's page says it sends `healthy`, `idle`, `degraded` and `paused`. The operations page lists six display states: `healthy`, `idle`, `erroring`, `recovering`, `stale` and `empty`. The build accepts and republishes the four Shipkeeper sends, unchanged, and leaves the mapping to Conn.
 4. **Duties named on other pages only.** The pipeline page says the hub rejects any message to Moldloft that carries a raw page captured by Sextant, without saying how one is recognised. Countersign's page says Muster rejects an override with no written reason. Shipkeeper's page says the owner's install, upgrade, pause and rollback actions are routed through Muster. None of these is in this specification or the contract, and none is built.
@@ -83,13 +83,37 @@ Choices the contract left to the build, each easy to change and each pinned by a
 
 - **The cause `duplicate`** is used in one place: a batch of health reports that names the same component twice.
 - **A slow identity check** answers `503` with the cause `busy`, since `store_slow` would name the wrong thing.
-- **A release step** is in the `normal` lane. A decision to keep ends the step, and nothing offers that item again.
-- **The owner's decision on a release step** is written to the ledger and is not kept as `results.countersign`, so it does not replace what Countersign decided about the item earlier.
+- **Release** is its own call, `POST /v1/release`, made by Countersign, because a stopped item is never offered for lease.
+- **A rebuild** follows the first build: after Tidegauge sends a live item back to `building` for Waybill, Moldloft and then Shakedown each have a step that leaves it in `building`.
+- **A lease** is named by its step, the step's place in the order of arrival and the attempt, so that it can be checked against Logbook's own record of the queue.
+- **Limits on a title and an address** are counted in bytes, as Logbook counts them.
+- **A target in the ownership map** has the form Logbook requires of an element name.
 - **A new item's lane** follows its source: `web-sweep` starts in `backfill`, the other three in `normal`.
 - **A `site-form` candidate** carries two more fields than the others, `pow` and `visitor`, because the proof of work and the daily limit need them. It shares one daily count with that visitor's edit proposals.
 - **An incident step** is in the `normal` lane, and its `state` is the state the item was in when the worker stopped.
 - **A live item with no check recorded,** as in a seed file, is due for one at once.
 - **The 4 KB limit on an edit proposal** is checked with the other shape checks, after the rate limit, now that every body is read up to 64 KiB.
+
+## What Logbook has no place for yet
+
+Muster's storage line above says it is stateless and that all durable state lives in Logbook. With Logbook's schema as it stands (migrations 0001 to 0009), that is true of items, the queue, the ledger, pauses, proposals, evaluations and decisions. It is not yet true of these, which Muster keeps in its own memory and loses when it stops:
+
+| What | Why Muster needs it | What is lost on a restart |
+| --- | --- | --- |
+| Each worker's result, other than an evaluation or a decision | Later workers are given `results.<worker>` | A later worker is given no earlier results |
+| The source an item was found through | Trawl is given it as `found.source` | The source |
+| A proposal's reason, and the file its element lives in | Countersign and Bellbuoy are given both | Both |
+| The answer to the call that ended a subject's last lease | A repeated call gets the same answer | A repeated call is refused with `lease_not_held` |
+| Each component's latest health and image digest | The feed, replay, and proposals going live | The next digest is only recorded, not acted on |
+| The day's count of submissions per visitor | The daily limit | The count starts again |
+
+**Proposed change to Logbook:** tables for results, component health and the daily counts, a column for an item's source, and columns for a proposal's reason and file. Until then Muster cannot be called stateless.
+
+Three smaller mismatches, each handled without changing Logbook:
+
+- **A stopped step.** Logbook's queue has no column for "held". Muster gives a stopped step a lease that never ends, with a fixed token, so it stays on record and is not offered.
+- **A step that is not due.** Logbook's queue has no "not before" column. Muster sets `queued_at` in the future for a Tidegauge check and offers only steps whose `queued_at` has passed. Logbook's `pub.queue_depth` view counts such a step as waiting.
+- **The pattern of a pause.** Logbook requires one. The `needs_subtool` call carries none, so Muster writes "not given".
 
 ## Changes to this specification
 
@@ -106,7 +130,8 @@ Choices the contract left to the build, each easy to change and each pinned by a
 | Gave every refusal a `cause` | The three codes cannot tell a caller what to do next; the cause can |
 | Added `POST /v1/items` | Nothing could record a new candidate |
 | Raised Waybill's `complete` to 256 KiB and set every other body to 64 KiB | A specification is larger than any other result |
-| Added the seven-day Tidegauge check, Bellbuoy's incident step, the move of a proposal to `live` and Countersign's release step | These were open questions; each now has a rule |
+| Added the seven-day Tidegauge check and its three outcomes, Bellbuoy's incident step, the move of a proposal to `live` and the owner's release | These were open questions; each now has a rule |
+| Named pgx as the one dependency, and added a store that keeps Muster's records in Logbook's schema | Muster is the only writer of Logbook's working records, and the standard library has no PostgreSQL driver |
 | Let `complete` take a result for a proposal as it does for an item | One rule for every step a worker completes, and Bellbuoy needs what Countersign decided |
 
 ## Related pages

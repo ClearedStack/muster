@@ -40,27 +40,34 @@ type Store interface {
 // the failure from Update or View.
 type Tx interface {
 	Item(id string) (Item, bool)
+	// AddItem records a new item and returns the identifier Logbook gave
+	// it. Whatever identifier the item carries is ignored: Logbook gives
+	// out every one. If an item is already recorded at the same address,
+	// nothing is added and the identifier of that item is returned, with
+	// existing set.
+	AddItem(Item) (id string, existing bool)
+	// PutItem changes an item that is on record.
 	PutItem(Item)
 	// Paused lists the items a worker paused, in the order it paused them.
 	Paused(worker string) []Item
 
 	Proposal(id string) (Proposal, bool)
+	// AddProposal records a new proposal and returns the identifier
+	// Logbook gave it.
+	AddProposal(Proposal) (id string)
+	// PutProposal changes a proposal that is on record.
 	PutProposal(Proposal)
-
-	// ItemAt returns the item recorded for an address key, if there is
-	// one. PutItemAt records it. The key is a hash of the address.
-	ItemAt(addressKey string) (string, bool)
-	PutItemAt(addressKey, id string)
-
 	// Building lists the proposals for one repository whose status is
 	// building, in the order they were received.
 	Building(repository string) []Proposal
 
 	// Entry returns the queue entry with this key. An item or a proposal
 	// has at most one step of its own, keyed by its identifier. An item
-	// may also have one incident step, keyed by IncidentKey, and one
-	// release step, keyed by ReleaseKey.
+	// may also have one incident step, keyed by IncidentKey.
 	Entry(key string) (Entry, bool)
+	// PutEntry writes a queue entry. An entry whose Arrival is zero is
+	// new: it takes the place of any entry with the same key and joins
+	// the end of its lane. An entry with an Arrival keeps its place.
 	PutEntry(Entry)
 	DeleteEntry(key string)
 	// NextEntry returns the entry a worker should be offered now: among
@@ -77,27 +84,21 @@ type Tx interface {
 	// Depths counts what is waiting at this moment.
 	Depths(now time.Time) Depths
 
-	// Next advances a named counter and returns its new value. Counters
-	// start at zero, so the first value is 1.
-	Next(counter string) uint64
-
 	// Bump adds one to the count kept for a key on a day and returns the
 	// new count. It reports false, and counts nothing, when the key is
 	// new and no more keys can be kept for that day.
 	Bump(day, key string) (int, bool)
 
-	// Append adds one record to the append-only ledger.
-	Append(Record)
-}
+	// Append adds one record to the append-only ledger and returns the
+	// number the ledger gave it. Numbers only ever go up.
+	Append(Record) uint64
 
-// Names of the counters Muster uses.
-const (
-	CounterArrival  = "arrival"
-	CounterLease    = "lease"
-	CounterItem     = "item"
-	CounterProposal = "proposal"
-	CounterLedger   = "ledger"
-)
+	// Evaluation records what Assay found about an item, and Decision
+	// what the owner decided about it, where Logbook keeps such things.
+	// Logbook checks both and may refuse them.
+	Evaluation(itemID string, result json.RawMessage)
+	Decision(itemID, outcome, reason string)
+}
 
 // Item is the working record of one idea for a tool.
 type Item struct {
@@ -120,11 +121,9 @@ type Item struct {
 	Results map[string]json.RawMessage
 
 	// Done remembers how the last lease on the item's own step ended,
-	// IncidentDone how the last lease on its incident step ended, and
-	// ReleaseDone how the last lease on its release step ended.
+	// and IncidentDone how the last lease on its incident step ended.
 	Done         Finished
 	IncidentDone Finished
-	ReleaseDone  Finished
 }
 
 // Proposal is one edit proposal. It never holds the address it came from,
@@ -155,7 +154,7 @@ type Entry struct {
 	Kind    lifecycle.Kind
 	Worker  string
 	Lane    lifecycle.Lane
-	Arrival uint64 // order of arrival; lower is earlier
+	Arrival uint64 // order of arrival, given by the store; lower is earlier
 	Attempt int    // how many times it has been leased
 
 	// NotBefore, when set, is the moment the step becomes due. Until
@@ -169,8 +168,8 @@ type Entry struct {
 	// never offered.
 	Held bool
 
-	// Incident is what an incident step or a release step reports. It
-	// is empty for any other kind of step.
+	// Incident is what an incident step reports. It is empty for any
+	// other kind of step.
 	Incident Incident
 }
 
@@ -184,9 +183,6 @@ type Incident struct {
 
 // IncidentKey is the queue key of the incident step of an item.
 func IncidentKey(itemID string) string { return "incident:" + itemID }
-
-// ReleaseKey is the queue key of the release step of an item.
-func ReleaseKey(itemID string) string { return "release:" + itemID }
 
 // Finished remembers how the last lease on a subject ended, so that a
 // worker repeating a call it was never told had succeeded gets the same
@@ -250,6 +246,5 @@ const (
 	ActSighting = "sighting"
 	ActIncident = "incident"
 	ActRelease  = "release"
-	ActKeep     = "keep"
 	ActLive     = "live"
 )

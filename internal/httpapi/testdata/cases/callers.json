@@ -149,6 +149,35 @@
       }
     },
     {
+      "note": "only Countersign may release a stopped item",
+      "as": "conn",
+      "method": "POST",
+      "path": "/v1/release",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 403,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "not_your_call",
+        "reason": "this caller may not make this call"
+      }
+    },
+    {
+      "as": "trawl",
+      "method": "POST",
+      "path": "/v1/release",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 403,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "not_your_call",
+        "reason": "this caller may not make this call"
+      }
+    },
+    {
       "note": "a worker may not read the feed",
       "as": "sextant",
       "method": "GET",

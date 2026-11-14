@@ -294,6 +294,28 @@
       "lane": "urgent"
     },
     {
+      "worker": "tidegauge",
+      "kind": "item",
+      "from": "live",
+      "to": "building",
+      "next": "waybill",
+      "lane": "urgent"
+    },
+    {
+      "worker": "waybill",
+      "kind": "item",
+      "from": "building",
+      "to": "building",
+      "next": "moldloft"
+    },
+    {
+      "worker": "moldloft",
+      "kind": "item",
+      "from": "building",
+      "to": "building",
+      "next": "shakedown"
+    },
+    {
       "worker": "countersign",
       "kind": "proposal",
       "from": "pending_approval",

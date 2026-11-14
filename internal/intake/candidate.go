@@ -2,12 +2,9 @@ package intake
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"net/netip"
 	"unicode"
-	"unicode/utf8"
 
 	"github.com/ClearedStack/muster/internal/contract"
 	"github.com/ClearedStack/muster/internal/lifecycle"
@@ -15,7 +12,7 @@ import (
 	"github.com/ClearedStack/muster/internal/queue"
 )
 
-// Limits on a candidate, in characters.
+// Limits on a candidate, in bytes, which is how Logbook counts them.
 const (
 	MaxTitle   = 200
 	MaxAddress = 2000
@@ -81,10 +78,10 @@ func (s *Service) Record(ctx context.Context, caller string, c Candidate) (*Reco
 	if !sourceForm(c.Source) {
 		return nil, contract.BadField
 	}
-	if utf8.RuneCountInString(c.Title) > MaxTitle || !plain(c.Title) {
+	if len(c.Title) > MaxTitle || !plain(c.Title) {
 		return nil, contract.BadField
 	}
-	if utf8.RuneCountInString(c.Address) > MaxAddress || !unbroken(c.Address) {
+	if len(c.Address) > MaxAddress || !unbroken(c.Address) {
 		return nil, contract.BadField
 	}
 	lane, known := sources[c.Source]
@@ -112,8 +109,6 @@ func (s *Service) Record(ctx context.Context, caller string, c Candidate) (*Reco
 	}
 
 	title := Strip(c.Title)
-	sum := sha256.Sum256([]byte(c.Address))
-	key := hex.EncodeToString(sum[:])
 
 	var answer *Recorded
 	var refusal *contract.Problem
@@ -127,34 +122,30 @@ func (s *Service) Record(ctx context.Context, caller string, c Candidate) (*Reco
 			refusal = contract.NothingLeft
 			return nil
 		}
-		if id, seen := tx.ItemAt(key); seen {
-			it, _ := tx.Item(id)
-			queue.Record(tx, now, caller, logbook.ActSighting, id, it.State, it.State, "")
-			answer = &Recorded{ID: id, State: it.State, Duplicate: true}
-			return nil
-		}
-		n := tx.Next(logbook.CounterItem)
-		id := lifecycle.ItemID(n)
-		if _, taken := tx.Item(id); taken || n > lifecycle.MaxID {
-			refusal = contract.Unexpected
-			return nil
-		}
 		it := logbook.Item{
-			ID: id, State: lifecycle.Discovered, Lane: lane,
+			State: lifecycle.Discovered, Lane: lane,
 			Source: c.Source, Title: title, Address: c.Address,
 		}
 		if c.Result != nil {
 			it.Results = map[string]json.RawMessage{caller: append(json.RawMessage(nil), c.Result...)}
 		}
-		tx.PutItem(it)
-		tx.PutItemAt(key, id)
+		id, existing := tx.AddItem(it)
+		if id == "" {
+			refusal = contract.Unexpected
+			return nil
+		}
+		if existing {
+			known, _ := tx.Item(id)
+			queue.Record(tx, now, caller, logbook.ActSighting, id, known.State, known.State, "")
+			answer = &Recorded{ID: id, State: known.State, Duplicate: true}
+			return nil
+		}
 		tx.PutEntry(logbook.Entry{
 			Key:     id,
 			Subject: id,
 			Kind:    lifecycle.KindItem,
 			Worker:  "trawl",
 			Lane:    lane,
-			Arrival: tx.Next(logbook.CounterArrival),
 		})
 		queue.Record(tx, now, caller, logbook.ActRecord, id, "", lifecycle.Discovered, "")
 		answer = &Recorded{ID: id, State: lifecycle.Discovered, Next: "trawl"}

@@ -19,7 +19,7 @@
       },
       "status": 200,
       "want": {
-        "lease": "PA-0001.1",
+        "lease": "PA-0001.1.1",
         "kind": "item",
         "id": "PA-0001",
         "state": "live",
@@ -34,7 +34,7 @@
       "path": "/v1/complete",
       "send": {
         "contract": "v1",
-        "lease": "PA-0001.1",
+        "lease": "PA-0001.1.1",
         "state": "live"
       },
       "status": 200,
@@ -64,7 +64,7 @@
       },
       "status": 200,
       "want": {
-        "lease": "PA-0001.2",
+        "lease": "PA-0001.2.1",
         "kind": "item",
         "id": "PA-0001",
         "state": "live",

@@ -75,6 +75,10 @@ func TestRefusals(t *testing.T) {
 		"no submissions allowed":            func(e map[string]string) { e["MUSTER_EDIT_DAILY_CAP"] = "0" },
 		"a negative cap":                    func(e map[string]string) { e["MUSTER_EDIT_DAILY_CAP"] = "-1" },
 		"a store wait that is not a number": func(e map[string]string) { e["MUSTER_STORE_SECONDS"] = "soon" },
+		"a seed file as well as a database": func(e map[string]string) {
+			e["MUSTER_SEED_FILE"] = "/made-up/seed.json"
+			e["MUSTER_DATABASE_URL"] = "postgres://made-up-host/logbook"
+		},
 	}
 	for name, change := range cases {
 		e := base()

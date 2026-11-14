@@ -35,7 +35,7 @@ Muster depends on Logbook. Assume it does not exist yet. Put it behind a small i
 
 ## Rules
 
-1. **Language:** Go, using the standard library wherever it is enough.
+1. **Language:** Go, using the standard library plus pgx (`github.com/jackc/pgx/v5`), the one dependency, which is how Muster reaches Logbook.
 2. **Clean room.** Write everything from scratch. Do not copy code, text or structure from another project, however permissive its license. An open-source library may be used as a dependency if its license is MIT, BSD or Apache 2.0 and its notice is kept.
 3. **No AI when it runs.** No model, and no call to one. The same input must give the same output on any machine, every time.
 4. **Stop instead of guessing.** When something is unexpected, refuse and report it plainly. Never improvise.

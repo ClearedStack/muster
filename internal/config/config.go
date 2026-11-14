@@ -21,6 +21,7 @@ type Config struct {
 	OwnershipMap string // MUSTER_OWNERSHIP_MAP: path of ownership_map.json
 	SaltFile     string // MUSTER_SALT_FILE: path of the secret the daily salt is made from
 	SeedFile     string // MUSTER_SEED_FILE: made-up items for the stand-in; optional
+	DatabaseURL  string // MUSTER_DATABASE_URL: where Logbook is; without it the stand-in is used
 
 	Lease        time.Duration // MUSTER_LEASE_SECONDS: how long a lease protects a step
 	FeedEvery    time.Duration // MUSTER_FEED_SECONDS: how often the feed sends a batch
@@ -46,6 +47,7 @@ func Load(getenv func(string) string) (Config, error) {
 		OwnershipMap: getenv("MUSTER_OWNERSHIP_MAP"),
 		SaltFile:     getenv("MUSTER_SALT_FILE"),
 		SeedFile:     getenv("MUSTER_SEED_FILE"),
+		DatabaseURL:  getenv("MUSTER_DATABASE_URL"),
 	}
 	var err error
 	if c.Lease, err = seconds(getenv, "MUSTER_LEASE_SECONDS", 60, 5, 3600); err != nil {
@@ -85,6 +87,9 @@ func Load(getenv func(string) string) (Config, error) {
 	}
 	if c.SaltFile == "" {
 		return Config{}, errors.New("MUSTER_SALT_FILE is not set")
+	}
+	if c.DatabaseURL != "" && c.SeedFile != "" {
+		return Config{}, errors.New("MUSTER_SEED_FILE is for the in-memory stand-in, and MUSTER_DATABASE_URL is set")
 	}
 	return c, nil
 }

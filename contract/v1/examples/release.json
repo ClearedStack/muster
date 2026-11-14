@@ -1,5 +1,5 @@
 {
-  "about": "The owner decides to release a held item. Countersign completes the release step with the state it was given and the decision: the item goes back to its worker in the urgent lane, in that state.",
+  "about": "Countersign passes on the owner's decision to let a stopped item run again: it goes back to its worker in the urgent lane, in the state it was stopped in.",
   "given": {
     "items": [
       {
@@ -24,16 +24,8 @@
         "path": "/v1/fail",
         "body": {
           "contract": "v1",
-          "lease": "PA-0001.1",
+          "lease": "PA-0001.1.1",
           "code": "E_PARSE"
-        }
-      },
-      {
-        "as": "countersign",
-        "method": "POST",
-        "path": "/v1/lease",
-        "body": {
-          "contract": "v1"
         }
       }
     ]
@@ -41,14 +33,10 @@
   "request": {
     "as": "countersign",
     "method": "POST",
-    "path": "/v1/complete",
+    "path": "/v1/release",
     "body": {
       "contract": "v1",
-      "lease": "release:PA-0001.2",
-      "state": "recorded",
-      "result": {
-        "decision": "release"
-      }
+      "id": "PA-0001"
     }
   },
   "expect": {

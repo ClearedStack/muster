@@ -34,9 +34,14 @@ const CheckEveryDays = 7
 // sets the next check. A check that finds the rule repealed retires the
 // item, and Chartroom takes it from there.
 //
-// Four of Tidegauge's moves still have no row: live to building, and
-// parked, linked or merged back to observed. The state table allows
-// them, and nothing says which worker follows.
+// A check that finds a cited source changed sends the item back to
+// building, in the urgent lane, with Waybill's step waiting: Waybill
+// rewrites the specification, Moldloft regenerates the tool, and
+// Shakedown and Chartroom take it from there as they did the first time.
+//
+// Three of Tidegauge's moves still have no row: parked, linked or merged
+// back to observed. The state table allows them, and nothing says how
+// Tidegauge comes to hold such an item or which worker follows.
 var routes = []Route{
 	{Worker: "trawl", Kind: KindItem, From: Discovered, To: Recorded, Next: "sextant"},
 	{Worker: "trawl", Kind: KindItem, From: Discovered, To: Rejected},
@@ -59,6 +64,9 @@ var routes = []Route{
 	{Worker: "chartroom", Kind: KindItem, From: Retired, To: Retired},
 	{Worker: "tidegauge", Kind: KindItem, From: Live, To: Live, Next: "tidegauge", Lane: Backfill, AfterDays: CheckEveryDays},
 	{Worker: "tidegauge", Kind: KindItem, From: Live, To: Retired, Next: "chartroom", Lane: Urgent},
+	{Worker: "tidegauge", Kind: KindItem, From: Live, To: Building, Next: "waybill", Lane: Urgent},
+	{Worker: "waybill", Kind: KindItem, From: Building, To: Building, Next: "moldloft"},
+	{Worker: "moldloft", Kind: KindItem, From: Building, To: Building, Next: "shakedown"},
 
 	{Worker: "countersign", Kind: KindProposal, From: PendingApproval, To: Approved, Next: "bellbuoy", Lane: Urgent},
 	{Worker: "countersign", Kind: KindProposal, From: PendingApproval, To: Declined},

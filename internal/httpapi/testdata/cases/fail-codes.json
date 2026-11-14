@@ -20,7 +20,7 @@
       },
       "status": 200,
       "want": {
-        "lease": "PA-0001.1",
+        "lease": "PA-0001.1.1",
         "kind": "item",
         "id": "PA-0001",
         "state": "recorded",
@@ -35,7 +35,7 @@
       "path": "/v1/fail",
       "send": {
         "contract": "v1",
-        "lease": "PA-0001.1",
+        "lease": "PA-0001.1.1",
         "code": "E_NEEDS_SUBTOOL"
       },
       "status": 400,
@@ -51,7 +51,7 @@
       "path": "/v1/fail",
       "send": {
         "contract": "v1",
-        "lease": "PA-0001.1",
+        "lease": "PA-0001.1.1",
         "code": "E_OTHER"
       },
       "status": 400,
@@ -67,7 +67,7 @@
       "path": "/v1/fail",
       "send": {
         "contract": "v1",
-        "lease": "PA-0001.1",
+        "lease": "PA-0001.1.1",
         "code": ""
       },
       "status": 400,
@@ -84,7 +84,7 @@
       "path": "/v1/fail",
       "send": {
         "contract": "v1",
-        "lease": "PA-0001.1",
+        "lease": "PA-0001.1.1",
         "code": "E_TIMEOUT"
       },
       "status": 200,

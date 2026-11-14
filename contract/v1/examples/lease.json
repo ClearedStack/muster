@@ -24,7 +24,7 @@
         "path": "/v1/complete",
         "body": {
           "contract": "v1",
-          "lease": "PA-0001.1",
+          "lease": "PA-0001.1.1",
           "state": "observed",
           "result": {
             "job": "made-up job"
@@ -44,7 +44,7 @@
   "expect": {
     "status": 200,
     "body": {
-      "lease": "PA-0001.2",
+      "lease": "PA-0001.2.1",
       "kind": "item",
       "id": "PA-0001",
       "state": "observed",

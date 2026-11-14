@@ -24,7 +24,7 @@
         "path": "/v1/fail",
         "body": {
           "contract": "v1",
-          "lease": "PA-0001.1",
+          "lease": "PA-0001.1.1",
           "code": "E_PARSE"
         }
       }
@@ -41,7 +41,7 @@
   "expect": {
     "status": 200,
     "body": {
-      "lease": "incident:PA-0001.2",
+      "lease": "incident:PA-0001.2.1",
       "kind": "incident",
       "id": "PA-0001",
       "state": "recorded",

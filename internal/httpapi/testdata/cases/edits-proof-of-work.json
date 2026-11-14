@@ -8,7 +8,7 @@
       "path": "/v1/edits",
       "send": {
         "contract": "v1",
-        "target": "catalog/sample-calculator/description",
+        "target": "catalog.sample-calculator.description",
         "change": "The sample description should say which made-up rule it follows.",
         "reason": "It reads as if no rule applies.",
         "pow": "",
@@ -29,7 +29,7 @@
       "path": "/v1/edits",
       "send": {
         "contract": "v1",
-        "target": "catalog/sample-calculator/description",
+        "target": "catalog.sample-calculator.description",
         "change": "The sample description should say which made-up rule it follows.",
         "reason": "It reads as if no rule applies.",
         "pow": "made-up",
@@ -50,7 +50,7 @@
       "path": "/v1/edits",
       "send": {
         "contract": "v1",
-        "target": "catalog/sample-calculator/description",
+        "target": "catalog.sample-calculator.description",
         "change": "The sample description should say which made-up rule it follows.",
         "reason": "It reads as if no rule applies.",
         "pow": "2026-01-05.0",
@@ -71,10 +71,10 @@
       "path": "/v1/edits",
       "send": {
         "contract": "v1",
-        "target": "catalog/sample-calculator/description",
+        "target": "catalog.sample-calculator.description",
         "change": "First made-up text.",
         "reason": "It reads as if no rule applies.",
-        "pow": "2026-01-05.10b6",
+        "pow": "2026-01-05.c2fd2",
         "honeypot": "",
         "source": "203.0.113.7"
       },
@@ -91,10 +91,10 @@
       "path": "/v1/edits",
       "send": {
         "contract": "v1",
-        "target": "catalog/sample-calculator/description",
+        "target": "catalog.sample-calculator.description",
         "change": "Second made-up text.",
         "reason": "It reads as if no rule applies.",
-        "pow": "2026-01-05.10b6",
+        "pow": "2026-01-05.c2fd2",
         "honeypot": "",
         "source": "203.0.113.7"
       },
@@ -112,10 +112,10 @@
       "path": "/v1/edits",
       "send": {
         "contract": "v1",
-        "target": "catalog/sample-calculator/description",
+        "target": "catalog.sample-calculator.description",
         "change": "The sample description should say which made-up rule it follows.",
         "reason": "It reads as if no rule applies.",
-        "pow": "2026-01-05.13ee87",
+        "pow": "2026-01-05.208bd",
         "honeypot": "",
         "source": "203.0.113.7"
       },
@@ -133,10 +133,10 @@
       "path": "/v1/edits",
       "send": {
         "contract": "v1",
-        "target": "catalog/sample-calculator/description",
+        "target": "catalog.sample-calculator.description",
         "change": "The sample description should say which made-up rule it follows.",
         "reason": "It reads as if no rule applies.",
-        "pow": "2026-01-05.13ee87",
+        "pow": "2026-01-05.208bd",
         "honeypot": "",
         "source": "203.0.113.7"
       },
@@ -154,10 +154,10 @@
       "path": "/v1/edits",
       "send": {
         "contract": "v1",
-        "target": "catalog/sample-calculator/description",
+        "target": "catalog.sample-calculator.description",
         "change": "The sample description should say which made-up rule it follows.",
         "reason": "It reads as if no rule applies.",
-        "pow": "2026-01-05.13ee87",
+        "pow": "2026-01-05.208bd",
         "honeypot": "",
         "source": "203.0.113.7"
       },
