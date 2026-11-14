@@ -94,6 +94,27 @@ Choices the contract left to the build, each easy to change and each pinned by a
 - **A live item with no check recorded,** as in a seed file, is due for one at once.
 - **The 4 KB limit on an edit proposal** is checked with the other shape checks, after the rate limit, now that every body is read up to 64 KiB.
 
+## What Logbook has no place for yet
+
+Muster's storage line above says it is stateless and that all durable state lives in Logbook. With Logbook's schema as it stands (migrations 0001 to 0009), that is true of items, the queue, the ledger, pauses, proposals, evaluations and decisions. It is not yet true of these, which Muster keeps in its own memory and loses when it stops:
+
+| What | Why Muster needs it | What is lost on a restart |
+| --- | --- | --- |
+| Each worker's result, other than an evaluation or a decision | Later workers are given `results.<worker>` | A later worker is given no earlier results |
+| The source an item was found through | Trawl is given it as `found.source` | The source |
+| A proposal's reason, and the file its element lives in | Countersign and Bellbuoy are given both | Both |
+| The answer to the call that ended a subject's last lease | A repeated call gets the same answer | A repeated call is refused with `lease_not_held` |
+| Each component's latest health and image digest | The feed, replay, and proposals going live | The next digest is only recorded, not acted on |
+| The day's count of submissions per visitor | The daily limit | The count starts again |
+
+**Proposed change to Logbook:** tables for results, component health and the daily counts, a column for an item's source, and columns for a proposal's reason and file. Until then Muster cannot be called stateless.
+
+Three smaller mismatches, each handled without changing Logbook:
+
+- **A stopped step.** Logbook's queue has no column for "held". Muster gives a stopped step a lease that never ends, with a fixed token, so it stays on record and is not offered.
+- **A step that is not due.** Logbook's queue has no "not before" column. Muster sets `queued_at` in the future for a Tidegauge check and offers only steps whose `queued_at` has passed. Logbook's `pub.queue_depth` view counts such a step as waiting.
+- **The pattern of a pause.** Logbook requires one. The `needs_subtool` call carries none, so Muster writes "not given".
+
 ## Changes to this specification
 
 | Change | Reason |
@@ -110,6 +131,7 @@ Choices the contract left to the build, each easy to change and each pinned by a
 | Added `POST /v1/items` | Nothing could record a new candidate |
 | Raised Waybill's `complete` to 256 KiB and set every other body to 64 KiB | A specification is larger than any other result |
 | Added the seven-day Tidegauge check and its three outcomes, Bellbuoy's incident step, the move of a proposal to `live` and the owner's release | These were open questions; each now has a rule |
+| Named pgx as the one dependency, and added a store that keeps Muster's records in Logbook's schema | Muster is the only writer of Logbook's working records, and the standard library has no PostgreSQL driver |
 | Let `complete` take a result for a proposal as it does for an item | One rule for every step a worker completes, and Bellbuoy needs what Countersign decided |
 
 ## Related pages

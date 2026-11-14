@@ -51,6 +51,7 @@ var (
 	BadProof        = &Problem{http.StatusBadRequest, Parse, "bad_field", "the proof of work is not valid"}
 	UnknownTarget   = &Problem{http.StatusBadRequest, Parse, "bad_field", "the target is not in the ownership map"}
 	NothingLeft     = &Problem{http.StatusBadRequest, Parse, "bad_field", "nothing is left of the text once markup is removed"}
+	LogbookRefused  = &Problem{http.StatusBadRequest, Parse, "bad_field", "the record store refused a field"}
 
 	NoCredential = &Problem{http.StatusUnauthorized, Parse, "no_credential", "no valid credential was presented"}
 	NotYourCall  = &Problem{http.StatusForbidden, Parse, "not_your_call", "this caller may not make this call"}
@@ -69,6 +70,11 @@ var (
 	UnknownHealth   = &Problem{http.StatusUnprocessableEntity, NeedsSubtool, "unknown_value", "this health state is not known"}
 	UnknownSource   = &Problem{http.StatusUnprocessableEntity, NeedsSubtool, "unknown_value", "this source is not known"}
 
+	// Logbook checks every row it is given and refuses one with a public
+	// code. LogbookRefused, above, is its E_PARSE; this is its
+	// E_NEEDS_SUBTOOL.
+	LogbookUnfamiliar = &Problem{http.StatusUnprocessableEntity, NeedsSubtool, "unknown_value", "the record store has no rule for a value"}
+
 	RateLimited = &Problem{http.StatusTooManyRequests, Timeout, "rate_limited", "too many submissions from this visitor today; try again tomorrow"}
 
 	// 503: try again.
@@ -84,9 +90,9 @@ var (
 func All() []*Problem {
 	return []*Problem{
 		NotJSON, UnknownField, MissingField, BadField, UseNeedsSubtool, BadProof,
-		UnknownTarget, NothingLeft, NoCredential, NotYourCall, NoSuchCall,
+		UnknownTarget, NothingLeft, LogbookRefused, NoCredential, NotYourCall, NoSuchCall,
 		WrongMethod, TooLarge, WrongType, LeaseNotHeld, MoveNotAllowed, Duplicate,
-		UnknownContract, UnknownHealth, UnknownSource, RateLimited, StoreSlow,
+		UnknownContract, UnknownHealth, UnknownSource, LogbookUnfamiliar, RateLimited, StoreSlow,
 		Busy, IdentitySlow, BadRecord, Unexpected,
 	}
 }

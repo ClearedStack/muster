@@ -21,7 +21,9 @@ import (
 	"github.com/ClearedStack/muster/internal/health"
 	"github.com/ClearedStack/muster/internal/httpapi"
 	"github.com/ClearedStack/muster/internal/intake"
+	"github.com/ClearedStack/muster/internal/logbook"
 	"github.com/ClearedStack/muster/internal/logbook/memory"
+	"github.com/ClearedStack/muster/internal/logbook/sql/sqltest"
 	"github.com/ClearedStack/muster/internal/queue"
 )
 
@@ -85,21 +87,46 @@ func (c *clock) Advance(d time.Duration) {
 
 type stack struct {
 	clock  *clock
-	store  *memory.Store
+	store  logbook.Store
+	mem    *memory.Store    // the stand-in, when that is the store
+	book   *sqltest.Logbook // a real Logbook, when that is the store
 	hub    *feed.Hub
 	server *httpapi.Server
 	tokens map[string]string // caller name to its made-up token
 }
 
+// newStack builds Muster on the in-memory stand-in for Logbook.
 func newStack(t *testing.T, seed *memory.Seed) *stack {
 	t.Helper()
 	clk := &clock{t: start}
-	store := memory.New()
+	mem := memory.New()
 	if seed != nil {
-		if err := store.Load(*seed); err != nil {
+		if err := mem.Load(*seed); err != nil {
 			t.Fatalf("seed: %v", err)
 		}
 	}
+	s := build(t, clk, mem)
+	s.mem = mem
+	return s
+}
+
+// newStackOnLogbook builds Muster on a real Logbook: a PostgreSQL
+// database of the test's own, with Logbook's migrations applied. The
+// test is skipped when no test database is given.
+func newStackOnLogbook(t *testing.T, seed *memory.Seed) *stack {
+	t.Helper()
+	clk := &clock{t: start}
+	book := sqltest.New(t, clk.Now)
+	if seed != nil {
+		book.Seed(t, *seed, start)
+	}
+	s := build(t, clk, book.Store)
+	s.book = book
+	return s
+}
+
+func build(t *testing.T, clk *clock, store logbook.Store) *stack {
+	t.Helper()
 	callers := readFile(t, "testdata/callers.json")
 	table, err := auth.ParseTable(callers)
 	if err != nil {

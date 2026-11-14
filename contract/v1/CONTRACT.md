@@ -105,6 +105,7 @@ Every caller presents its Kubernetes ServiceAccount token as a bearer token. Mus
 - **Kinds.** `kind` is `item`, `proposal` or `incident`, and says what the step is about.
 - **Found.** A lease on an item that was recorded through `POST /v1/items` carries `found`: its `source`, `title` and `address`, as they were recorded.
 - **Results.** `complete` takes an optional `result`, a JSON object, for items and proposals alike. Each worker's result is kept under that worker's name, and every later worker is given all of them: a lease on an item carries `results.trawl`, `results.sextant` and so on, and a lease on a proposal carries `results.countersign` once Countersign has given one. A worker that completes a second step on the same item replaces its own earlier result and no one else's. A `complete` with no `result` leaves the results as they are.
+- **Evaluations and decisions.** Logbook keeps a record of each evaluation and of each decision the owner makes on one, and checks both. A result from Assay that has `gates` is recorded as an evaluation: `profile`, `gates`, `factors`, `score`, `recommendation` and `split_flag`, in the form Logbook's specification gives. When Countersign completes an item that has an evaluation, the move is recorded as the owner's decision, with `result.reason` as the reason. Logbook refuses an evaluation that is not well formed, and a decision that goes against the recommendation without a reason; the `complete` is then refused with `bad_field` and nothing changes.
 - **Lease names.** `lease` is a string to hand back as it was given. It names the step, the step's place in the order of arrival, and the attempt: `PA-0001.7.2` is the second attempt at the step that arrived seventh.
 - **Leases.** A lease lasts 60 seconds unless configured otherwise. A heartbeat moves its end to one lease length from now. When a lease runs out the step is offered again, and from then on the worker that lost it is refused. Until someone else takes the step, a late lease still counts, so a finished result that arrives late is kept.
 - **Repeats.** A worker repeats a call until it is acknowledged. Repeating the call that ended a lease gives the same answer and does nothing twice.
@@ -166,7 +167,7 @@ A refusal is an HTTP status and a body with exactly three fields:
 | `400` | `not_json` | `E_PARSE` | The body is not one JSON value |
 | `400` | `unknown_field` | `E_PARSE` | The body has a field the call does not define |
 | `400` | `missing_field` | `E_PARSE` | A required field is missing or empty |
-| `400` | `bad_field` | `E_PARSE` | A field has the wrong type or form: a value that is not allowed, an invalid proof of work, a target that is not in the ownership map, text with nothing left once markup is removed |
+| `400` | `bad_field` | `E_PARSE` | A field has the wrong type or form: a value that is not allowed, an invalid proof of work, a target that is not in the ownership map, text with nothing left once markup is removed, or a row that Logbook's own check refuses |
 | `401` | `no_credential` | `E_PARSE` | No valid token |
 | `403` | `not_your_call` | `E_PARSE` | A caller making a call that is not its own |
 | `404` | `no_such_call` | `E_PARSE` | No such path |
@@ -177,7 +178,7 @@ A refusal is an HTTP status and a body with exactly three fields:
 | `409` | `move_not_allowed` | `E_PARSE` | The tables do not allow the move, or it is not this worker's to make |
 | `409` | `duplicate` | `E_PARSE` | One batch of health reports names the same component twice |
 | `422` | `unknown_contract` | `E_NEEDS_SUBTOOL` | A contract version Muster does not know |
-| `422` | `unknown_value` | `E_NEEDS_SUBTOOL` | A health state or a source Muster does not know |
+| `422` | `unknown_value` | `E_NEEDS_SUBTOOL` | A health state or a source Muster does not know, or a value Logbook has no rule for |
 | `429` | `rate_limited` | `E_TIMEOUT` | Too many submissions from one visitor today |
 | `503` | `store_slow` | `E_TIMEOUT` | Logbook took too long |
 | `503` | `busy` | `E_TIMEOUT` | Too many calls at once, or the identity check took too long |

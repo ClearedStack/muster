@@ -22,6 +22,7 @@ import (
 	"github.com/ClearedStack/muster/internal/lifecycle"
 	"github.com/ClearedStack/muster/internal/logbook"
 	"github.com/ClearedStack/muster/internal/logbook/memory"
+	"github.com/ClearedStack/muster/internal/logbook/sql/sqltest"
 )
 
 // contract/v1/examples holds one saved example for each call and each
@@ -86,6 +87,13 @@ func (broken) View(context.Context, func(logbook.Tx) error) error {
 	return errors.New("made-up failure")
 }
 
+// refusing is a Logbook that refuses whatever it is given, the way
+// Logbook's own checks refuse a row they do not accept.
+type refusing struct{ problem *contract.Problem }
+
+func (r refusing) Update(context.Context, func(logbook.Tx) error) error { return r.problem }
+func (r refusing) View(context.Context, func(logbook.Tx) error) error   { return r.problem }
+
 // arrange brings about a condition an example names: something wrong
 // that no request can cause by itself.
 func arrange(t *testing.T, s *stack, condition string) {
@@ -103,10 +111,20 @@ func arrange(t *testing.T, s *stack, condition string) {
 		t.Cleanup(s.server.Occupy())
 	case "the cluster does not answer the identity check in time":
 		s.server.Auth = slowAuth{}
+	case "logbook refuses a field":
+		setStore(refusing{contract.LogbookRefused})
+	case "logbook has no rule for a value":
+		setStore(refusing{contract.LogbookUnfamiliar})
 	case "the queue says sextant is next for an item that is live":
+		if s.book != nil {
+			s.book.Exec(t, `INSERT INTO core.item (item_id, state, title) VALUES ('PA-0001', 'live', 'Made-up item PA-0001')`)
+			s.book.Exec(t, `INSERT INTO core.ledger (item_id, actor, to_state, note) VALUES ('PA-0001', 'trawl', 'live', 'seed')`)
+			s.book.Exec(t, `INSERT INTO core.queue (worker, lane, item_id, queued_at) VALUES ('sextant', 'normal', 'PA-0001', $1)`, start)
+			break
+		}
 		if err := s.store.Update(context.Background(), func(tx logbook.Tx) error {
 			tx.PutItem(logbook.Item{ID: "PA-0001", State: lifecycle.Live, Lane: lifecycle.Normal})
-			tx.PutEntry(logbook.Entry{Key: "PA-0001", Subject: "PA-0001", Kind: lifecycle.KindItem, Worker: "sextant", Lane: lifecycle.Normal, Arrival: 1})
+			tx.PutEntry(logbook.Entry{Key: "PA-0001", Subject: "PA-0001", Kind: lifecycle.KindItem, Worker: "sextant", Lane: lifecycle.Normal})
 			return nil
 		}); err != nil {
 			t.Fatal(err)
@@ -117,6 +135,23 @@ func arrange(t *testing.T, s *stack, condition string) {
 }
 
 func TestContractExamples(t *testing.T) {
+	replayExamples(t, newStack)
+}
+
+// The same examples, with the same expected bytes, against a real
+// Logbook: a PostgreSQL database with Logbook's migrations applied,
+// written to through the muster role.
+func TestContractExamplesOnLogbook(t *testing.T) {
+	if !sqltest.Available() {
+		t.Skip("no test Logbook: set MUSTER_TEST_DATABASE_URL and MUSTER_LOGBOOK_MIGRATIONS")
+	}
+	if *update {
+		t.Skip("the expected answers are written from the stand-in")
+	}
+	replayExamples(t, newStackOnLogbook)
+}
+
+func replayExamples(t *testing.T, newStack func(*testing.T, *memory.Seed) *stack) {
 	paths, err := filepath.Glob(filepath.Join(examplesDir, "*.json"))
 	if err != nil || len(paths) == 0 {
 		t.Fatalf("no contract examples found (%v)", err)

@@ -48,6 +48,12 @@
     "reason": "nothing is left of the text once markup is removed"
   },
   {
+    "status": 400,
+    "error": "E_PARSE",
+    "cause": "bad_field",
+    "reason": "the record store refused a field"
+  },
+  {
     "status": 401,
     "error": "E_PARSE",
     "cause": "no_credential",
@@ -118,6 +124,12 @@
     "error": "E_NEEDS_SUBTOOL",
     "cause": "unknown_value",
     "reason": "this source is not known"
+  },
+  {
+    "status": 422,
+    "error": "E_NEEDS_SUBTOOL",
+    "cause": "unknown_value",
+    "reason": "the record store has no rule for a value"
   },
   {
     "status": 429,

@@ -163,7 +163,7 @@ func TestSourceAddressIsNeverKept(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	enc.Encode(s.store.Ledger())
+	enc.Encode(s.mem.Ledger())
 	for _, address := range []string{"203.0.113.7", "2001:db8::7", "203.0.113", "2001:db8"} {
 		if strings.Contains(dump.String(), address) {
 			t.Errorf("the records hold the source address %s:\n%s", address, dump.String())
@@ -310,7 +310,7 @@ func (b blocking) Update(ctx context.Context, fn func(logbook.Tx) error) error {
 // try again; it is not queued, so a flood cannot grow memory.
 func TestBusyLimit(t *testing.T) {
 	s := newStack(t, oneItem())
-	gate := blocking{s.store, make(chan struct{}, httpapi.MaxInFlight), make(chan struct{})}
+	gate := blocking{s.mem, make(chan struct{}, httpapi.MaxInFlight), make(chan struct{})}
 	s.server.Queue.Store = gate
 	lease := post("/v1/lease", "tidegauge", map[string]string{"contract": "v1"})
 

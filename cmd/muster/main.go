@@ -23,7 +23,9 @@ import (
 	"github.com/ClearedStack/muster/internal/health"
 	"github.com/ClearedStack/muster/internal/httpapi"
 	"github.com/ClearedStack/muster/internal/intake"
+	"github.com/ClearedStack/muster/internal/logbook"
 	"github.com/ClearedStack/muster/internal/logbook/memory"
+	"github.com/ClearedStack/muster/internal/logbook/sql"
 	"github.com/ClearedStack/muster/internal/queue"
 )
 
@@ -83,21 +85,37 @@ func run(logger *log.Logger) error {
 		return errors.New("the salt secret is too short")
 	}
 
-	store := memory.New()
-	logger.Print("using the in-memory stand-in for Logbook; nothing is kept when this process stops")
-	if cfg.SeedFile != "" {
-		data, err := readSmall(cfg.SeedFile)
-		if err != nil {
-			return errors.New("the seed could not be read")
-		}
-		seed, err := memory.ParseSeed(data)
+	var store logbook.Store
+	if cfg.DatabaseURL != "" {
+		db, err := sql.Open(cfg.DatabaseURL, time.Now)
 		if err != nil {
 			return err
 		}
-		if err := store.Load(seed); err != nil {
-			return err
+		defer func() {
+			closing, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			db.Close(closing)
+		}()
+		store = db
+		logger.Print("using Logbook")
+	} else {
+		standIn := memory.New()
+		store = standIn
+		logger.Print("using the in-memory stand-in for Logbook; nothing is kept when this process stops")
+		if cfg.SeedFile != "" {
+			data, err := readSmall(cfg.SeedFile)
+			if err != nil {
+				return errors.New("the seed could not be read")
+			}
+			seed, err := memory.ParseSeed(data)
+			if err != nil {
+				return err
+			}
+			if err := standIn.Load(seed); err != nil {
+				return err
+			}
+			logger.Printf("loaded %d seed items", len(seed.Items))
 		}
-		logger.Printf("loaded %d seed items", len(seed.Items))
 	}
 
 	hub := &feed.Hub{Store: store, Clock: time.Now, Timeout: cfg.StoreTimeout}
