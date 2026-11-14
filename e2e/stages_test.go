@@ -156,7 +156,7 @@ func (e *env) standInTrawl(t *testing.T) {
 // cannot run. A run that stands in for any worker is a diagnostic and never
 // passes: see the end of the test.
 func (e *env) standIn(worker string) bool {
-	for _, w := range strings.Split(os.Getenv("E2E_STAND_IN"), ",") {
+	for _, w := range strings.Split(e.standInEnv, ",") {
 		if strings.TrimSpace(w) == worker {
 			return true
 		}
@@ -224,8 +224,14 @@ func (e *env) sextantObservation() string {
 	if reason == "" {
 		reason = "none in its output"
 	}
-	return e.scrub(fmt.Sprintf("OBSERVED: Sextant made %d ledger rows for %s; error code %q, note %q; its own reason %q; SEXTANT_LOCAL_TEST_ORIGIN was %s.",
-		n, e.itemID, code, note, reason, e.pageURL))
+	origin := "SEXTANT_LOCAL_TEST_ORIGIN was not set (no run started)"
+	e.mu.Lock()
+	if p := e.lastProc["sextant"]; p != nil {
+		origin = describeOrigin(p.env)
+	}
+	e.mu.Unlock()
+	return e.scrub(fmt.Sprintf("OBSERVED: Sextant made %d ledger rows for %s; error code %q, note %q; its own reason %q; %s.",
+		n, e.itemID, code, note, reason, origin))
 }
 
 // standInSextant does what Sextant's work loop does to Muster, by hand, with

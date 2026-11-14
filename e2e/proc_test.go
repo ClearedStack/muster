@@ -21,6 +21,7 @@ type proc struct {
 	name    string
 	cmd     *exec.Cmd
 	logPath string
+	env     []string // the environment it was started with
 	done    chan struct{}
 	exit    error // valid once done is closed
 	once    sync.Once
@@ -73,7 +74,7 @@ func (e *env) start(name, bin string, args []string, extra ...string) *proc {
 		logFile.Close()
 		e.t.Fatalf("starting %s: %v", name, err)
 	}
-	p := &proc{name: name, cmd: cmd, logPath: logPath, done: make(chan struct{})}
+	p := &proc{name: name, cmd: cmd, logPath: logPath, env: cmd.Env, done: make(chan struct{})}
 	e.mu.Lock()
 	e.lastProc[name] = p
 	e.mu.Unlock()

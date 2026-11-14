@@ -15,7 +15,6 @@
 package e2e
 
 import (
-	"fmt"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -64,6 +63,8 @@ type env struct {
 	itemID string
 	// standIns names the workers that were stood in for; see E2E_STAND_IN.
 	standIns []string
+	// standInEnv is E2E_STAND_IN, read once at the start.
+	standInEnv string
 	// notes is what a stage adds to its line in the stage report.
 	notes map[string]string
 	// lastProc is the latest process started under each name.
@@ -104,36 +105,23 @@ func TestEndToEnd(t *testing.T) {
 		{"outcome", stageOutcome},
 	}
 
-	type result struct {
-		name, status, note string
-	}
-	var report []result
-	t.Cleanup(func() {
-		var b strings.Builder
-		b.WriteString("\nSTAGE REPORT\n")
-		for i, r := range report {
-			fmt.Fprintf(&b, "  %2d  %-16s %s", i+1, r.name, r.status)
-			if r.note != "" {
-				fmt.Fprintf(&b, " (%s)", r.note)
-			}
-			b.WriteString("\n")
-		}
-		t.Log(b.String())
-	})
+	runStages(t, e, stages)
+}
 
-	// A stage is PASSED only when its body ran to the last statement. A
-	// subtest that a -run filter skipped makes t.Run return true too, so
-	// that result alone proves nothing.
+// runStages runs the stages in order and reports what the run amounts to.
+//
+// A stage ran only if its body reached its last statement: a subtest that a
+// -run filter skipped makes t.Run return true too, so that result alone
+// proves nothing. What the run amounts to is decided by judge.
+func runStages(t *testing.T, e *env, stages []stage) verdict {
 	ran := map[string]bool{}
-	blocked, why, status := "", "", ""
-	var notRun []string
+	var runs []stageRun
+	blocked := false
 	for _, s := range stages {
-		if blocked != "" {
-			report = append(report, result{s.name, status, why})
-			if status == "NOT RUN" {
-				notRun = append(notRun, s.name)
-			}
-			t.Run(s.name, func(t *testing.T) { t.Skipf("%s: %s", status, why) })
+		r := stageRun{Name: s.name}
+		if blocked {
+			t.Run(s.name, func(t *testing.T) { t.Skip("an earlier stage failed or did not run") })
+			runs = append(runs, r)
 			continue
 		}
 		ok := t.Run(s.name, func(t *testing.T) {
@@ -141,26 +129,16 @@ func TestEndToEnd(t *testing.T) {
 			s.run(e, t)
 			ran[s.name] = true // the last statement of the subtest
 		})
-		switch {
-		case !ok:
-			report = append(report, result{s.name, "FAILED", "see the failure above"})
-			blocked, why, status = s.name, "stage "+s.name+" failed", "NOT REACHED"
-		case !ran[s.name]:
-			report = append(report, result{s.name, "NOT RUN", "a -run filter or a skip kept it from running"})
-			notRun = append(notRun, s.name)
-			blocked, why, status = s.name, "stage "+s.name+" did not run", "NOT RUN"
-		case slices.Contains(e.standIns, s.name):
-			report = append(report, result{s.name, "STAND-IN", "the worker did not run"})
-		default:
-			report = append(report, result{s.name, "PASSED", e.notes[s.name]})
-		}
+		r.Failed, r.Ran, r.Note = !ok, ran[s.name], e.notes[s.name]
+		blocked = r.Failed || !r.Ran
+		runs = append(runs, r)
 	}
-	if len(notRun) > 0 {
-		t.Errorf("NOT ALL STAGES RAN, so this is not a pass: %s", strings.Join(notRun, ", "))
+	v := judge(runs, e.standInEnv, e.standIns)
+	t.Log(renderReport(e.versions(), v.Lines))
+	for _, p := range v.Problems {
+		t.Error(p)
 	}
-	if len(e.standIns) > 0 {
-		t.Errorf("DIAGNOSTIC RUN, NOT AN ACCEPTANCE PASS: the harness stood in for %s (E2E_STAND_IN)", strings.Join(e.standIns, ", "))
-	}
+	return v
 }
 
 // cleanup runs f when the test ends, or when the run is interrupted with
@@ -190,9 +168,15 @@ func (e *env) onInterrupt() {
 	e.t.Cleanup(func() { signal.Stop(ch) })
 }
 
+// newBareEnv is an env with nothing started. E2E_STAND_IN is read here, once.
+func newBareEnv() *env {
+	return &env{notes: map[string]string{}, lastProc: map[string]*proc{}, standInEnv: os.Getenv("E2E_STAND_IN")}
+}
+
 func newEnv(t *testing.T) *env {
 	t.Helper()
-	e := &env{cur: t, notes: map[string]string{}, lastProc: map[string]*proc{}}
+	e := newBareEnv()
+	e.cur = t
 	e.t = tb{t, e}
 	e.onInterrupt()
 	for _, tool := range []string{"initdb", "pg_ctl", "git"} {
@@ -263,6 +247,22 @@ func stageInfrastructure(e *env, t *testing.T) {
 	}
 	e.pageURL = e.startPage(page)
 	t.Logf("postgres, muster, the git server and the page server are up (muster %s)", e.musterURL)
+}
+
+// versions is what build-workers.sh wrote down: repository, branch and commit
+// of everything the run executed.
+func (e *env) versions() []string {
+	raw, err := os.ReadFile(filepath.Join(e.bin, "versions.txt"))
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, l := range strings.Split(strings.TrimSpace(string(raw)), "\n") {
+		if l = strings.TrimSpace(l); l != "" {
+			out = append(out, l)
+		}
+	}
+	return out
 }
 
 // waitUntil polls until ok reports true or the time is up.
