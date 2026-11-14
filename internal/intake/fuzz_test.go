@@ -24,6 +24,9 @@ func FuzzStrip(f *testing.F) {
 		`<a href=">">inside</a>outside`,
 		"<img src='x' onerror='alert(1)'>",
 		"   padded \n text \t ",
+		"<style>\xff\xfe</style>kept",
+		"<style>\u023a\u023a\u023a</STYLE>kept",
+		"<script>\u0130\u0130</ScRiPt>after",
 	}
 	for _, s := range seeds {
 		f.Add(s)

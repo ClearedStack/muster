@@ -104,13 +104,13 @@ func tagName(s string) string {
 	for j < len(s) && (letter(s[j]) || s[j] >= '0' && s[j] <= '9') {
 		j++
 	}
-	return strings.ToLower(s[i:j])
+	return asciiLower(s[i:j])
 }
 
 // closing returns how much of s to skip to get past the closing tag of a
 // script or style element, or -1 if s never closes it.
 func closing(s, name string) int {
-	lower := strings.ToLower(s)
+	lower := asciiLower(s)
 	want := "</" + name
 	from := 0
 	for {
@@ -131,4 +131,19 @@ func closing(s, name string) int {
 		}
 		return after + end + 1
 	}
+}
+
+// asciiLower maps ASCII A..Z to a..z byte-for-byte so len(asciiLower(s)) == len(s)
+// even when s holds invalid UTF-8 or multi-byte Unicode runes whose case fold
+// changes UTF-8 byte length.
+func asciiLower(s string) string {
+	b := make([]byte, len(s))
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c >= 'A' && c <= 'Z' {
+			c += 'a' - 'A'
+		}
+		b[i] = c
+	}
+	return string(b)
 }

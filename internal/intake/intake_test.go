@@ -67,6 +67,23 @@ func TestStripLeavesNoTag(t *testing.T) {
 	build("", 4)
 }
 
+func TestStripScriptAndStyleByteOffsets(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"invalid UTF-8 inside style", "<style>\xff\xfe</style>kept", "kept"},
+		{"expanding UTF-8 rune U+023A inside style", "<style>\u023a\u023a\u023a</STYLE>kept", "kept"},
+		{"expanding UTF-8 rune U+0130 inside script", "<script>\u0130\u0130</ScRiPt>after", "after"},
+	}
+	for _, tc := range cases {
+		if got := Strip(tc.in); got != tc.want {
+			t.Errorf("%s: Strip(%q) = %q, want %q", tc.name, tc.in, got, tc.want)
+		}
+	}
+}
+
 func TestProofOfWorkSavedExamples(t *testing.T) {
 	var file struct {
 		Cases []struct {
