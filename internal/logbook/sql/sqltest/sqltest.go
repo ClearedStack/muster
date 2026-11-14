@@ -50,8 +50,10 @@ func Available() bool {
 
 // Logbook is one test's database.
 type Logbook struct {
-	Store *sql.Store
-	Admin *pgx.Conn // the owner of the database, for setting a scene and looking at the result
+	Store  *sql.Store
+	Admin  *pgx.Conn // the owner of the database, for setting a scene and looking at the result
+	config *pgx.ConnConfig
+	name   string
 }
 
 func connect(t testing.TB, database string, role string) (*pgx.ConnConfig, *pgx.Conn) {
@@ -173,7 +175,48 @@ func New(t testing.TB, clock func() time.Time) *Logbook {
 		defer server.Close(ctx)
 		server.Exec(ctx, `DROP DATABASE IF EXISTS `+name+` WITH (FORCE)`)
 	})
-	return &Logbook{Store: store, Admin: admin}
+	return &Logbook{Store: store, Admin: admin, config: config, name: name}
+}
+
+// Reopen opens a fresh store on the same database, with nothing kept in
+// memory from before, the way Muster comes back after a restart.
+func (l *Logbook) Reopen(t testing.TB, clock func() time.Time) *sql.Store {
+	t.Helper()
+	store, err := sql.Open(address(l.config, l.name), clock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { store.Close(context.Background()) })
+	return store
+}
+
+// OpenAsMuster grants login on the muster role, as Logbook's cluster
+// migration job does, and opens a store directly as muster with a
+// separate password.
+func (l *Logbook) OpenAsMuster(t testing.TB, password string, clock func() time.Time) *sql.Store {
+	t.Helper()
+	ctx := context.Background()
+	var ddl string
+	if err := l.Admin.QueryRow(ctx, `SELECT format('ALTER ROLE muster LOGIN PASSWORD %L', $1::text)`, password).Scan(&ddl); err != nil {
+		t.Fatal(err)
+	}
+	l.exec(t, ddl)
+	t.Cleanup(func() {
+		l.Admin.Exec(ctx, `ALTER ROLE muster NOLOGIN PASSWORD NULL`)
+	})
+	u := url.URL{
+		Scheme:   "postgres",
+		User:     url.User("muster"),
+		Host:     net.JoinHostPort(l.config.Host, strconv.Itoa(int(l.config.Port))),
+		Path:     "/" + l.name,
+		RawQuery: "sslmode=disable",
+	}
+	store, err := sql.OpenWithPassword(u.String(), password, clock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { store.Close(ctx) })
+	return store
 }
 
 // address is where the store under test connects: the test server, the

@@ -87,7 +87,7 @@ func run(logger *log.Logger) error {
 
 	var store logbook.Store
 	if cfg.DatabaseURL != "" {
-		db, err := sql.Open(cfg.DatabaseURL, time.Now)
+		db, err := sql.OpenWithPassword(cfg.DatabaseURL, cfg.DatabasePassword, time.Now)
 		if err != nil {
 			return err
 		}

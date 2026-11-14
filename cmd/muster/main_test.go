@@ -336,6 +336,7 @@ func TestRefusesToStart(t *testing.T) {
 		{"a salt that is too short", "MUSTER_SALT_FILE", write("salt.txt", "short"), "the salt secret is too short"},
 		{"a seed with an unknown state", "MUSTER_SEED_FILE", write("seed.json", `{"items":[{"id":"PA-0001","state":"finished","lane":"normal"}]}`), "unknown state"},
 		{"a lease length that is not a number", "MUSTER_LEASE_SECONDS", "soon", "MUSTER_LEASE_SECONDS must be a whole number"},
+		{"a database password with no database", "MUSTER_DATABASE_PASSWORD", "made-up-secret", "MUSTER_DATABASE_URL is not set"},
 	}
 	for _, c := range cases {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

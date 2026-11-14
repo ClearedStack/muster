@@ -18,10 +18,11 @@ type Config struct {
 	Auth     string // MUSTER_AUTH: "kubernetes" or "file"
 	AuthFile string // MUSTER_AUTH_FILE: the caller table, when Auth is "file"
 
-	OwnershipMap string // MUSTER_OWNERSHIP_MAP: path of ownership_map.json
-	SaltFile     string // MUSTER_SALT_FILE: path of the secret the daily salt is made from
-	SeedFile     string // MUSTER_SEED_FILE: made-up items for the stand-in; optional
-	DatabaseURL  string // MUSTER_DATABASE_URL: where Logbook is; without it the stand-in is used
+	OwnershipMap     string // MUSTER_OWNERSHIP_MAP: path of ownership_map.json
+	SaltFile         string // MUSTER_SALT_FILE: path of the secret the daily salt is made from
+	SeedFile         string // MUSTER_SEED_FILE: made-up items for the stand-in; optional
+	DatabaseURL      string // MUSTER_DATABASE_URL: where Logbook is; without it the stand-in is used
+	DatabasePassword string // MUSTER_DATABASE_PASSWORD: password for Logbook, when kept separate from the URL
 
 	Lease        time.Duration // MUSTER_LEASE_SECONDS: how long a lease protects a step
 	FeedEvery    time.Duration // MUSTER_FEED_SECONDS: how often the feed sends a batch
@@ -41,13 +42,14 @@ const (
 // os.Getenv.
 func Load(getenv func(string) string) (Config, error) {
 	c := Config{
-		Listen:       or(getenv("MUSTER_LISTEN"), ":8080"),
-		Auth:         getenv("MUSTER_AUTH"),
-		AuthFile:     getenv("MUSTER_AUTH_FILE"),
-		OwnershipMap: getenv("MUSTER_OWNERSHIP_MAP"),
-		SaltFile:     getenv("MUSTER_SALT_FILE"),
-		SeedFile:     getenv("MUSTER_SEED_FILE"),
-		DatabaseURL:  getenv("MUSTER_DATABASE_URL"),
+		Listen:           or(getenv("MUSTER_LISTEN"), ":8080"),
+		Auth:             getenv("MUSTER_AUTH"),
+		AuthFile:         getenv("MUSTER_AUTH_FILE"),
+		OwnershipMap:     getenv("MUSTER_OWNERSHIP_MAP"),
+		SaltFile:         getenv("MUSTER_SALT_FILE"),
+		SeedFile:         getenv("MUSTER_SEED_FILE"),
+		DatabaseURL:      getenv("MUSTER_DATABASE_URL"),
+		DatabasePassword: getenv("MUSTER_DATABASE_PASSWORD"),
 	}
 	var err error
 	if c.Lease, err = seconds(getenv, "MUSTER_LEASE_SECONDS", 60, 5, 3600); err != nil {
@@ -87,6 +89,9 @@ func Load(getenv func(string) string) (Config, error) {
 	}
 	if c.SaltFile == "" {
 		return Config{}, errors.New("MUSTER_SALT_FILE is not set")
+	}
+	if c.DatabasePassword != "" && c.DatabaseURL == "" {
+		return Config{}, errors.New("MUSTER_DATABASE_PASSWORD is set, and MUSTER_DATABASE_URL is not set")
 	}
 	if c.DatabaseURL != "" && c.SeedFile != "" {
 		return Config{}, errors.New("MUSTER_SEED_FILE is for the in-memory stand-in, and MUSTER_DATABASE_URL is set")

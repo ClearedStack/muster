@@ -1,0 +1,8 @@
+# Lets `kubectl kustomize .` work from the top of the repository. What a
+# cluster applies is deploy/, which Argo CD reads directly; see
+# deploy/README.md.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - deploy

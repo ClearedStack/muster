@@ -210,6 +210,20 @@ func (s *stack) do(t *testing.T, st step) *httptest.ResponseRecorder {
 }
 
 func TestSavedExamples(t *testing.T) {
+	replayCases(t, newStack)
+}
+
+func TestSavedExamplesOnLogbook(t *testing.T) {
+	if !sqltest.Available() {
+		t.Skip("no test Logbook: set MUSTER_TEST_DATABASE_URL and MUSTER_LOGBOOK_MIGRATIONS")
+	}
+	if *update {
+		t.Skip("the expected answers are written from the stand-in")
+	}
+	replayCases(t, newStackOnLogbook)
+}
+
+func replayCases(t *testing.T, newStack func(*testing.T, *memory.Seed) *stack) {
 	paths, err := filepath.Glob("testdata/cases/*.json")
 	if err != nil || len(paths) == 0 {
 		t.Fatalf("no saved examples found (%v)", err)
