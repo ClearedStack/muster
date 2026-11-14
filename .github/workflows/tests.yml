@@ -1,0 +1,53 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+# Tests only. No image is built or pushed from GitHub.
+jobs:
+  tests:
+    name: Go tests and saved examples on PostgreSQL 17
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        # Same postgres:17 image index pinned in ClearedStack/logbook.
+        image: docker.io/library/postgres:17@sha256:846a7ddaa67a4b354ae1d21087b683901aa6113a4ed626d3787cfbf6c85e3e07
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 127.0.0.1:5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=2s
+          --health-timeout=2s
+          --health-retries=15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: muster
+      - uses: actions/checkout@v4
+        with:
+          repository: ClearedStack/logbook
+          path: logbook
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: muster/go.mod
+          cache-dependency-path: muster/go.sum
+      - name: gofmt
+        working-directory: muster
+        run: gofmt -l . | (! grep .)
+      - name: go vet
+        working-directory: muster
+        run: go vet ./...
+      - name: go test
+        working-directory: muster
+        env:
+          MUSTER_TEST_DATABASE_URL: postgres://postgres@127.0.0.1:5432/postgres?sslmode=disable
+          MUSTER_LOGBOOK_MIGRATIONS: ${{ github.workspace }}/logbook/migrations
+        run: go test -race -count=1 ./...

@@ -12,7 +12,7 @@
 
 ---
 
-> **Status: ready to deploy.** Muster runs alone on an in-memory stand-in for Logbook, and against Logbook's schema in PostgreSQL. Its tests pass on both, and hardened Kubernetes manifests live under [`deploy/`](deploy). It has not yet been deployed to a cluster, and Logbook's schema has no place yet for some of what Muster keeps. [What works today](#what-works-today) and [Not yet done](#not-yet-done) say exactly where it stands.
+> **Status: ready to deploy.** Muster runs alone on an in-memory stand-in for Logbook, and statelessly against Logbook's schema (migrations 0001 to 0010) in PostgreSQL 17. Its tests pass on both, and hardened Kubernetes manifests live under [`deploy/`](deploy). It has not yet been deployed to a cluster. [What works today](#what-works-today) and [Not yet done](#not-yet-done) say exactly where it stands.
 
 Muster is a control-plane service of the ClearedStack platform. ClearedStack is an open pipeline that finds ideas for government-contracting tools, screens and scores them, and builds each one from the public rule. Muster is meant to be understood and used without the rest.
 
@@ -29,6 +29,7 @@ Muster is a control-plane service of the ClearedStack platform. ClearedStack is 
 | [`internal/`](internal) | Its parts, one package each. See [Layout](#layout). |
 | [`deploy/`](deploy) | Kubernetes manifests: ServiceAccount and TokenReview RBAC, default-deny NetworkPolicy, ConfigMap, Service and Deployment. |
 | [`kustomization.yaml`](kustomization.yaml) | Assembles the manifests in `deploy/`. |
+| [`.github/workflows/tests.yml`](.github/workflows/tests.yml) | Runs `gofmt`, `go vet` and `go test -race` against PostgreSQL 17 and Logbook's migrations. |
 | [`examples/seed.json`](examples/seed.json) | Eight made-up items to start the stand-in with when trying Muster by hand. |
 | [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) | The licence notices of pgx and the three modules it brings. |
 | [`.ko.yaml`](.ko.yaml) | How `ko` builds the image from source. There is no Dockerfile. |
@@ -73,19 +74,15 @@ Everything below is built, and each rule has saved examples that fail if the beh
 - **Edit intake, checks 1 to 4.** Proof of work, honeypot, a daily-salted rate limit that never stores an address, and the shape and size check with markup stripped. What passes is kept as `pending_approval` and queued for Countersign. Check 5, the owner's approval, happens there. An approved proposal goes live when Shipkeeper reports a new digest for its repository.
 - **Identity.** Every caller presents its Kubernetes ServiceAccount token, and each may make only its own calls.
 - **Refusals.** Every refusal is a status, one of the three codes, a cause a program can act on and a reason for a person, all from a fixed list of 28. None is built from request data.
-- **Logbook.** With `MUSTER_DATABASE_URL` set, Muster keeps its records in Logbook's own tables through the `muster` role: items, the queue, the ledger, pauses, edit proposals, evaluations and decisions. Logbook gives out every identifier. A change of state, its ledger row and the next queue step are one PostgreSQL transaction. The contract examples pass against it with the same expected bytes as against the stand-in, and Logbook's own integrity check finds nothing wrong with what Muster writes.
+- **Logbook.** With `MUSTER_DATABASE_URL` set, Muster keeps every durable record in Logbook's own tables (migrations 0001 to 0010) through the `muster` role: items and their intake sources, the queue and held steps, the ledger, pauses, edit proposals with reasons and file paths, worker results, lease outcomes, evaluations, decisions, component health and image digests, and daily visitor submission counts. Muster holds nothing beside Logbook in memory, so a restart loses nothing. Logbook gives out every identifier, a change of state, its ledger row and the next queue step are one PostgreSQL transaction, the 52 contract examples and 30 multi-step cases pass against it with the same expected bytes as against the stand-in, and Logbook's 19-check `core.integrity_check()` finds nothing wrong with what Muster writes.
 - **Small and unprivileged.** One static binary that writes nothing to disk. Under the load test it peaks at about 38 MiB of the 48 MiB budget, most of it the stand-in’s copy of the records; idle it holds about 7 MiB.
 
 ## Not yet done
 
-- **What Logbook has no column for.** These are kept beside Logbook, in Muster's memory, and are lost when Muster stops: each worker's result (other than an evaluation or a decision), the source an item was found through, a proposal's reason and file, the answer to the call that ended a subject's last lease, component health and image digests, and the day's count of submissions per visitor. After a restart a later worker is given no earlier results, a repeated call is refused where it would have been acknowledged, and a new digest is only recorded, not acted on. Logbook needs tables for these before Muster can be called stateless.
-- **PostgreSQL 17.** The SQL store was tested on PostgreSQL 16, with Logbook's migrations applied directly, because PostgreSQL 17 could not be installed where the tests were run. Logbook's own migrate script accepts only 17.
-- **Logbook's migrations 0008 and 0009** were taken from the branch behind Logbook's pull request 5, which had not been merged.
 - **Three of Tidegauge's moves.** `parked`, `linked` or `merged` back to `observed` are in the state table and have no next worker defined, so they are refused.
 - **The identity check against a real cluster.** It is tested against saved answers from a stand-in for the Kubernetes API, not against a cluster.
-- **Three duties named on other pages and not in `SPEC.md` or the contract:** rejecting raw Sextant pages bound for Moldloft, requiring a written reason for an override, and routing the owner's install, upgrade, pause and rollback actions.
-- **Kubernetes manifests.** None is included. The form Shipkeeper expects is not specified.
-- **The image has not been pushed or signed.** `ko build --platform=linux/arm64` was run without pushing and produced a 4.3 MiB image whose user is not root.
+- **Three duties named on other pages and not in `SPEC.md` or the contract:** rejecting raw Sextant pages bound for Moldloft, requiring a written reason for an override in the in-memory stand-in (Logbook's `core.check_decision` already requires one), and routing the owner's install, upgrade, pause and rollback actions.
+- **The image has not been pushed or signed.** [`deploy/muster.yaml`](deploy/muster.yaml) carries an all-zero placeholder `sha256` digest on `lazarette.clearedstack.svc.cluster.local:5000/muster` until Keelworks builds and signs the `ko` image into Lazarette.
 
 `SPEC.md` lists the open questions behind these, and the choices the contract left to the build.
 
