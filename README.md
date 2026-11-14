@@ -29,7 +29,6 @@ Muster is a control-plane service of the ClearedStack platform. ClearedStack is 
 | [`internal/`](internal) | Its parts, one package each. See [Layout](#layout). |
 | [`deploy/`](deploy) | The kustomize directory Argo CD applies: ServiceAccount and its `system:auth-delegator` binding, ConfigMap, Deployment, Service, NetworkPolicy and the `cs-workers` namespace. See [`deploy/README.md`](deploy/README.md). |
 | [`kustomization.yaml`](kustomization.yaml) | Points at `deploy/`, so `kubectl kustomize .` works from the top. |
-| [`.github/workflows/tests.yml`](.github/workflows/tests.yml) | Runs `gofmt`, `go vet` and `go test -race` against PostgreSQL 17 and Logbook's migrations. |
 | [`examples/seed.json`](examples/seed.json) | Eight made-up items to start the stand-in with when trying Muster by hand. |
 | [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) | The licence notices of pgx and the three modules it brings. |
 | [`.ko.yaml`](.ko.yaml) | How `ko` builds the image from source. There is no Dockerfile. |
