@@ -29,11 +29,10 @@ import (
 	"github.com/ClearedStack/muster/internal/logbook/sql/sqltest"
 )
 
-// itemAddress is where the invented candidate "was found". It has to look
-// public: Trawl refuses the reserved suffixes (.test, .example, .invalid) and
-// every IP address, and Sextant refuses anything but https on a public host.
-// The name is invented and does not resolve to anything.
-const itemAddress = "https://wrap-rate.e2e-agency.gov/calculator"
+// itemAddress is where the invented candidate "was found": the invented page
+// on the local page server. Sextant reads it only because the harness names
+// that server's origin in SEXTANT_LOCAL_TEST_ORIGIN.
+func (e *env) itemAddress() string { return e.pageURL + "/calculator" }
 
 type env struct {
 	t    testing.TB // cleanups and the environment belong to the whole run; a failure belongs to the stage running
@@ -65,6 +64,10 @@ type env struct {
 	itemID string
 	// standIns names the workers that were stood in for; see E2E_STAND_IN.
 	standIns []string
+	// notes is what a stage adds to its line in the stage report.
+	notes map[string]string
+	// lastProc is the latest process started under each name.
+	lastProc map[string]*proc
 }
 
 // tb sends failures to the stage that is running and everything else (cleanup,
@@ -111,31 +114,49 @@ func TestEndToEnd(t *testing.T) {
 		for i, r := range report {
 			fmt.Fprintf(&b, "  %2d  %-16s %s", i+1, r.name, r.status)
 			if r.note != "" {
-				fmt.Fprintf(&b, "  (%s)", r.note)
+				fmt.Fprintf(&b, " (%s)", r.note)
 			}
 			b.WriteString("\n")
 		}
 		t.Log(b.String())
 	})
 
-	failed := ""
+	// A stage is PASSED only when its body ran to the last statement. A
+	// subtest that a -run filter skipped makes t.Run return true too, so
+	// that result alone proves nothing.
+	ran := map[string]bool{}
+	blocked, why, status := "", "", ""
+	var notRun []string
 	for _, s := range stages {
-		if failed != "" {
-			report = append(report, result{s.name, "NOT REACHED", "stage " + failed + " failed"})
-			t.Run(s.name, func(t *testing.T) { t.Skipf("not reached: stage %s failed", failed) })
+		if blocked != "" {
+			report = append(report, result{s.name, status, why})
+			if status == "NOT RUN" {
+				notRun = append(notRun, s.name)
+			}
+			t.Run(s.name, func(t *testing.T) { t.Skipf("%s: %s", status, why) })
 			continue
 		}
-		ok := t.Run(s.name, func(t *testing.T) { e.cur = t; s.run(e, t) })
-		if ok {
-			if slices.Contains(e.standIns, s.name) {
-				report = append(report, result{s.name, "STAND-IN", "the worker did not run"})
-				continue
-			}
-			report = append(report, result{s.name, "PASSED", ""})
-		} else {
+		ok := t.Run(s.name, func(t *testing.T) {
+			e.cur = t
+			s.run(e, t)
+			ran[s.name] = true // the last statement of the subtest
+		})
+		switch {
+		case !ok:
 			report = append(report, result{s.name, "FAILED", "see the failure above"})
-			failed = s.name
+			blocked, why, status = s.name, "stage "+s.name+" failed", "NOT REACHED"
+		case !ran[s.name]:
+			report = append(report, result{s.name, "NOT RUN", "a -run filter or a skip kept it from running"})
+			notRun = append(notRun, s.name)
+			blocked, why, status = s.name, "stage "+s.name+" did not run", "NOT RUN"
+		case slices.Contains(e.standIns, s.name):
+			report = append(report, result{s.name, "STAND-IN", "the worker did not run"})
+		default:
+			report = append(report, result{s.name, "PASSED", e.notes[s.name]})
 		}
+	}
+	if len(notRun) > 0 {
+		t.Errorf("NOT ALL STAGES RAN, so this is not a pass: %s", strings.Join(notRun, ", "))
 	}
 	if len(e.standIns) > 0 {
 		t.Errorf("DIAGNOSTIC RUN, NOT AN ACCEPTANCE PASS: the harness stood in for %s (E2E_STAND_IN)", strings.Join(e.standIns, ", "))
@@ -171,7 +192,7 @@ func (e *env) onInterrupt() {
 
 func newEnv(t *testing.T) *env {
 	t.Helper()
-	e := &env{cur: t}
+	e := &env{cur: t, notes: map[string]string{}, lastProc: map[string]*proc{}}
 	e.t = tb{t, e}
 	e.onInterrupt()
 	for _, tool := range []string{"initdb", "pg_ctl", "git"} {
