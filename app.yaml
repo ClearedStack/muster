@@ -1,0 +1,22 @@
+# Desired state of Muster for Keelworks digest pinning and Shipkeeper reconciliation.
+# The bootstrap digest is replaced when Keelworks builds and signs Muster into Lazarette.
+name: muster
+namespace: clearedstack
+image: muster
+digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+replicas: 1
+port: 8080
+memory: 48Mi
+allowFrom:
+  - clearedstack/conn
+  - clearedstack/shipkeeper
+  - cs-workers/assay
+  - cs-workers/bellbuoy
+  - cs-workers/chartroom
+  - cs-workers/countersign
+  - cs-workers/moldloft
+  - cs-workers/sextant
+  - cs-workers/shakedown
+  - cs-workers/tidegauge
+  - cs-workers/trawl
+  - cs-workers/waybill

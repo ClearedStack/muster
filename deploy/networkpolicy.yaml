@@ -1,7 +1,8 @@
-# Default-deny ingress and egress for Muster, opening only what SPEC.md
-# and Contract v1 require:
-#   - Ingress TCP 8080 from the 10 workers in cs-workers, plus Conn and
-#     Shipkeeper in clearedstack.
+# Default-deny ingress and egress for Muster, split into two policies so
+# Shipkeeper's Server-Side Apply of NetworkPolicy/muster (Ingress) merges
+# without conflicts and never disturbs NetworkPolicy/muster-egress (Egress):
+#   - Ingress TCP 8080 from Conn and Shipkeeper in clearedstack, plus the
+#     10 workers in cs-workers (matching app.yaml allowFrom).
 #   - Egress TCP 5432 to Logbook in clearedstack, UDP/TCP 53 to cluster
 #     DNS in kube-system, and TCP 443/6443 to private cluster addresses
 #     for Kubernetes TokenReview.
@@ -20,40 +21,99 @@ spec:
       app.kubernetes.io/name: muster
   policyTypes:
     - Ingress
-    - Egress
   ingress:
     - from:
         - namespaceSelector:
             matchLabels:
-              kubernetes.io/metadata.name: cs-workers
+              kubernetes.io/metadata.name: clearedstack
           podSelector:
-            matchExpressions:
-              - key: app.kubernetes.io/name
-                operator: In
-                values:
-                  - trawl
-                  - sextant
-                  - assay
-                  - countersign
-                  - waybill
-                  - moldloft
-                  - shakedown
-                  - chartroom
-                  - tidegauge
-                  - bellbuoy
+            matchLabels:
+              app.kubernetes.io/name: conn
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: clearedstack
           podSelector:
-            matchExpressions:
-              - key: app.kubernetes.io/name
-                operator: In
-                values:
-                  - conn
-                  - shipkeeper
+            matchLabels:
+              app.kubernetes.io/name: shipkeeper
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: cs-workers
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: assay
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: cs-workers
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: bellbuoy
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: cs-workers
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: chartroom
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: cs-workers
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: countersign
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: cs-workers
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: moldloft
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: cs-workers
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: sextant
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: cs-workers
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: shakedown
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: cs-workers
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: tidegauge
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: cs-workers
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: trawl
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: cs-workers
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: waybill
       ports:
-        - protocol: TCP
-          port: 8080
+        - port: 8080
+          protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: muster-egress
+  namespace: clearedstack
+  labels:
+    app.kubernetes.io/name: muster
+    app.kubernetes.io/part-of: clearedstack
+    app.kubernetes.io/component: control-plane
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: muster
+  policyTypes:
+    - Egress
   egress:
     - to:
         - namespaceSelector:

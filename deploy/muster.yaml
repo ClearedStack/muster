@@ -11,7 +11,7 @@
 #          --from-literal=salt="$(head -c 32 /dev/urandom | base64)"
 #
 # Image digest is a placeholder until Keelworks builds and signs the ko
-# image into Lazarette and updates this manifest.
+# image into Lazarette and updates app.yaml / this manifest.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -23,7 +23,53 @@ metadata:
     app.kubernetes.io/component: control-plane
 data:
   ownership_map.json: |
-    {"elements":{}}
+    {
+      "elements": {
+        "command.hero.mission":        { "repository": "clearedstack.com", "file": "src/data/site.ts",        "kind": "DATA" },
+        "portal.home.hero":            { "repository": "clearedstack.com", "file": "src/app/guides/page.tsx", "kind": "CONFIG" },
+        "command.attention.p0":        { "repository": "shipkeeper",       "file": "app.yaml",                "kind": "ISSUE" },
+        "command.attention.p1":        { "repository": "muster",           "file": "app.yaml",                "kind": "ISSUE" },
+        "command.attention.p2":        { "repository": "countersign",      "file": "app.yaml",                "kind": "ISSUE" },
+        "decide.sandbox.test":         { "repository": "clearedstack.com", "file": "src/app/guides/page.tsx", "kind": "ISSUE" },
+        "app.conn.manifest":           { "repository": "clearedstack.com", "file": "app.yaml",                "kind": "CONFIG" },
+        "app.muster.manifest":         { "repository": "muster",           "file": "app.yaml",                "kind": "CONFIG" },
+        "app.logbook.manifest":        { "repository": "logbook",          "file": "deploy/logbook.yaml",     "kind": "CONFIG" },
+        "app.plainforge.manifest":     { "repository": "plainforge",       "file": "app.yaml",                "kind": "CONFIG" },
+        "app.lazarette.manifest":      { "repository": "lazarette",        "file": "app.yaml",                "kind": "CONFIG" },
+        "app.keelworks.manifest":      { "repository": "keelworks",        "file": "app.yaml",                "kind": "CONFIG" },
+        "app.shipkeeper.manifest":     { "repository": "shipkeeper",       "file": "app.yaml",                "kind": "CONFIG" },
+        "worker.trawl.manifest":       { "repository": "trawl",            "file": "app.yaml",                "kind": "CONFIG" },
+        "worker.sextant.manifest":     { "repository": "sextant",          "file": "app.yaml",                "kind": "CONFIG" },
+        "worker.assay.manifest":       { "repository": "assay",            "file": "app.yaml",                "kind": "CONFIG" },
+        "worker.countersign.manifest": { "repository": "countersign",      "file": "app.yaml",                "kind": "CONFIG" },
+        "worker.waybill.manifest":     { "repository": "waybill",          "file": "app.yaml",                "kind": "CONFIG" },
+        "worker.moldloft.manifest":    { "repository": "moldloft",         "file": "app.yaml",                "kind": "CONFIG" },
+        "worker.shakedown.manifest":   { "repository": "shakedown",        "file": "app.yaml",                "kind": "CONFIG" },
+        "worker.chartroom.manifest":   { "repository": "chartroom",        "file": "app.yaml",                "kind": "CONFIG" },
+        "worker.tidegauge.manifest":   { "repository": "tidegauge",        "file": "app.yaml",                "kind": "CONFIG" },
+        "worker.bellbuoy.manifest":    { "repository": "bellbuoy",         "file": "app.yaml",                "kind": "CONFIG" },
+        "worker.trawl.role":           { "repository": "trawl",            "file": "app.yaml",                "kind": "CONFIG" },
+        "worker.sextant.role":         { "repository": "sextant",          "file": "app.yaml",                "kind": "CONFIG" },
+        "worker.assay.role":           { "repository": "assay",            "file": "app.yaml",                "kind": "CONFIG" },
+        "worker.countersign.role":     { "repository": "countersign",      "file": "app.yaml",                "kind": "CONFIG" },
+        "worker.waybill.role":         { "repository": "waybill",          "file": "app.yaml",                "kind": "CONFIG" },
+        "worker.moldloft.role":        { "repository": "moldloft",         "file": "app.yaml",                "kind": "CONFIG" },
+        "worker.shakedown.role":       { "repository": "shakedown",        "file": "app.yaml",                "kind": "CONFIG" },
+        "worker.chartroom.role":       { "repository": "chartroom",        "file": "app.yaml",                "kind": "CONFIG" },
+        "worker.tidegauge.role":       { "repository": "tidegauge",        "file": "app.yaml",                "kind": "CONFIG" },
+        "worker.bellbuoy.role":        { "repository": "bellbuoy",         "file": "app.yaml",                "kind": "CONFIG" },
+        "pipeline.trawl":              { "repository": "trawl",            "file": "app.yaml",                "kind": "ISSUE" },
+        "pipeline.sextant":            { "repository": "sextant",          "file": "app.yaml",                "kind": "ISSUE" },
+        "pipeline.assay":              { "repository": "assay",            "file": "app.yaml",                "kind": "ISSUE" },
+        "pipeline.countersign":        { "repository": "countersign",      "file": "app.yaml",                "kind": "ISSUE" },
+        "pipeline.waybill":            { "repository": "waybill",          "file": "app.yaml",                "kind": "ISSUE" },
+        "pipeline.moldloft":           { "repository": "moldloft",         "file": "app.yaml",                "kind": "ISSUE" },
+        "pipeline.shakedown":          { "repository": "shakedown",        "file": "app.yaml",                "kind": "ISSUE" },
+        "pipeline.chartroom":          { "repository": "chartroom",        "file": "app.yaml",                "kind": "ISSUE" },
+        "pipeline.tidegauge":          { "repository": "tidegauge",        "file": "app.yaml",                "kind": "ISSUE" },
+        "pipeline.bellbuoy":           { "repository": "bellbuoy",         "file": "app.yaml",                "kind": "ISSUE" }
+      }
+    }
 ---
 apiVersion: v1
 kind: Service
@@ -39,14 +85,14 @@ spec:
   selector:
     app.kubernetes.io/name: muster
   ports:
-    - name: http
+    - name: http-80
       protocol: TCP
       port: 80
-      targetPort: http
-    - name: http-alt
+      targetPort: 8080
+    - name: http
       protocol: TCP
       port: 8080
-      targetPort: http
+      targetPort: 8080
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -100,8 +146,7 @@ spec:
           image: lazarette.clearedstack.svc.cluster.local:5000/muster@sha256:0000000000000000000000000000000000000000000000000000000000000000
           imagePullPolicy: IfNotPresent
           ports:
-            - name: http
-              containerPort: 8080
+            - containerPort: 8080
               protocol: TCP
           env:
             - name: MUSTER_LISTEN
@@ -129,16 +174,12 @@ spec:
               cpu: 200m
               memory: 48Mi
           readinessProbe:
-            httpGet:
-              path: /healthz
-              port: http
-            initialDelaySeconds: 2
-            periodSeconds: 10
-            timeoutSeconds: 2
+            tcpSocket:
+              port: 8080
           livenessProbe:
             httpGet:
               path: /healthz
-              port: http
+              port: 8080
             initialDelaySeconds: 5
             periodSeconds: 15
             timeoutSeconds: 2

@@ -27,12 +27,13 @@ Muster is a control-plane service of the ClearedStack platform. ClearedStack is 
 | [`component.json`](component.json) | This component’s entry in the ClearedStack naming registry. |
 | [`cmd/muster`](cmd/muster) | The program. |
 | [`internal/`](internal) | Its parts, one package each. See [Layout](#layout). |
-| [`deploy/`](deploy) | Kubernetes manifests: ServiceAccount and TokenReview RBAC, default-deny NetworkPolicy, ConfigMap, Service and Deployment. |
+| [`deploy/`](deploy) | Kubernetes manifests: ServiceAccount and TokenReview RBAC, ingress and egress NetworkPolicies, ConfigMap (`ownership_map.json`), Service and Deployment. |
 | [`kustomization.yaml`](kustomization.yaml) | Assembles the manifests in `deploy/`. |
-| [`.github/workflows/tests.yml`](.github/workflows/tests.yml) | Runs `gofmt`, `go vet` and `go test -race` against PostgreSQL 17 and Logbook's migrations. |
+| [`app.yaml`](app.yaml) | Desired state of Muster for Keelworks digest pinning and Shipkeeper Server-Side Apply reconciliation. |
+| [`.github/workflows/tests.yml`](.github/workflows/tests.yml) | Runs `gofmt`, `go vet`, `go test -race` against PostgreSQL 17 and Logbook's migrations, and bounded Go fuzz passes. |
 | [`examples/seed.json`](examples/seed.json) | Eight made-up items to start the stand-in with when trying Muster by hand. |
 | [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) | The licence notices of pgx and the three modules it brings. |
-| [`.ko.yaml`](.ko.yaml) | How `ko` builds the image from source. There is no Dockerfile. |
+| [`.ko.yaml`](.ko.yaml) | How `ko` and Keelworks build the `linux/arm64` image from source. There is no Dockerfile. |
 | [`brand/`](brand) | The Muster logo and mark, for light and dark backgrounds. |
 
 ## At a glance
