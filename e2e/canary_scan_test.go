@@ -121,3 +121,42 @@ func TestScanCanaryGitFailureIsAnError(t *testing.T) {
 		t.Errorf("a directory that is not a repository scanned clean, want an error")
 	}
 }
+
+// shimGit puts a git on PATH that behaves as git except for the subcommand
+// named, which it handles with body (a shell fragment).
+func shimGit(t *testing.T, subcommand, body string) {
+	t.Helper()
+	real, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	script := "#!/bin/sh\nfor a in \"$@\"; do\n  if [ \"$a\" = " + subcommand + " ]; then\n" + body + "\n  fi\ndone\nexec " + real + " \"$@\"\n"
+	if err := os.WriteFile(filepath.Join(dir, "git"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+// A cat-file that stops early and says nothing wrong must not read as clean:
+// every object listed has to be read.
+func TestScanCanaryEveryListedObjectIsRead(t *testing.T) {
+	git, bare := scratch(t)
+	wt := filepath.Join(filepath.Dir(bare), "wt")
+	put(t, filepath.Join(wt, "a.txt"), []byte("clean\n"))
+	git("add", ".")
+	git("commit", "-qm", "c")
+	git("push", "-q", bare, "--all")
+
+	for name, body := range map[string]string{
+		"exits at once with status 0": "    exit 0",
+		"exits with status 1":         "    exit 1",
+	} {
+		t.Run(name, func(t *testing.T) {
+			shimGit(t, "cat-file", body)
+			if hits, err := scanCanary(bare, "CANARY"); err == nil {
+				t.Errorf("a cat-file that did not deliver every object scanned clean (hits %v), want an error", hits)
+			}
+		})
+	}
+}

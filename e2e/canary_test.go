@@ -38,6 +38,7 @@ func scanCanary(gitDir, text string) (hits []string, err error) {
 		return nil, err
 	}
 	var ids bytes.Buffer
+	listed := 0
 	paths := map[string]string{}
 	for _, line := range strings.Split(strings.TrimSpace(string(listing)), "\n") {
 		if line == "" {
@@ -46,6 +47,7 @@ func scanCanary(gitDir, text string) (hits []string, err error) {
 		sha, path, _ := strings.Cut(line, " ")
 		paths[sha] = path
 		ids.WriteString(sha + "\n")
+		listed++
 	}
 	if ids.Len() == 0 {
 		return nil, fmt.Errorf("the repository holds no objects reachable from a ref")
@@ -58,6 +60,7 @@ func scanCanary(gitDir, text string) (hits []string, err error) {
 	}
 	r := bufio.NewReader(bytes.NewReader(out))
 	needle := []byte(text)
+	read := 0
 	for {
 		header, err := r.ReadString('\n')
 		if err == io.EOF && header == "" {
@@ -78,9 +81,15 @@ func scanCanary(gitDir, text string) (hits []string, err error) {
 		if _, err := io.ReadFull(r, body); err != nil {
 			return nil, fmt.Errorf("reading a %s object: %w", f[1], err)
 		}
+		read++
 		if bytes.Contains(body, needle) {
 			hits = append(hits, fmt.Sprintf("%s %.10s (%s)", f[1], f[0], paths[f[0]]))
 		}
+	}
+	// A cat-file that stopped early, however politely, must not read as
+	// clean: every object that was listed has to have been read.
+	if read != listed {
+		return nil, fmt.Errorf("git cat-file delivered %d of %d objects", read, listed)
 	}
 	return hits, nil
 }
