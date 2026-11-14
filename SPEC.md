@@ -27,7 +27,7 @@ Rather than letting 10 worker pods hold database passwords or implement their ow
 | **Version** | `v0.1.0-draft` |
 | **Owning Repo** | `muster` |
 | **RAM Request** | `48 MiB` |
-| **Priority Class** | High (Control Plane — protected from eviction) |
+| **Priority Class** | High (Control Plane - protected from eviction) |
 | **Storage** | Stateless (all durable state lives in Logbook) |
 | **Network Exposure** | Cluster-private (`ClusterIP` only); reachable by Conn, Shipkeeper, and `cs-workers` |
 

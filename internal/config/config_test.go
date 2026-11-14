@@ -53,6 +53,17 @@ func TestOverrides(t *testing.T) {
 		c.AuthFile != "/made-up/callers.json" || c.SeedFile != "/made-up/seed.json" {
 		t.Errorf("got %+v", c)
 	}
+
+	delete(e, "MUSTER_SEED_FILE")
+	e["MUSTER_DATABASE_URL"] = "postgres://muster@made-up-host/logbook?sslmode=disable"
+	e["MUSTER_DATABASE_PASSWORD"] = "made-up-secret-@:/?#%"
+	c, err = Load(env(e))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.DatabaseURL == "" || c.DatabasePassword != "made-up-secret-@:/?#%" {
+		t.Errorf("got %+v", c)
+	}
 }
 
 // A setting that is missing or does not parse stops Muster from
@@ -75,6 +86,9 @@ func TestRefusals(t *testing.T) {
 		"no submissions allowed":            func(e map[string]string) { e["MUSTER_EDIT_DAILY_CAP"] = "0" },
 		"a negative cap":                    func(e map[string]string) { e["MUSTER_EDIT_DAILY_CAP"] = "-1" },
 		"a store wait that is not a number": func(e map[string]string) { e["MUSTER_STORE_SECONDS"] = "soon" },
+		"a database password with no database": func(e map[string]string) {
+			e["MUSTER_DATABASE_PASSWORD"] = "made-up-secret"
+		},
 		"a seed file as well as a database": func(e map[string]string) {
 			e["MUSTER_SEED_FILE"] = "/made-up/seed.json"
 			e["MUSTER_DATABASE_URL"] = "postgres://made-up-host/logbook"

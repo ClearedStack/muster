@@ -368,6 +368,10 @@ func TestEvaluationAndDecision(t *testing.T) {
 	if _, err := f.queue.Complete(ctx, "assay", g2.Lease, lifecycle.Scored, wrong); err != contract.LogbookRefused {
 		t.Errorf("an evaluation whose score does not add up: %v", err)
 	}
+	malformed := json.RawMessage(`{"profile":"sample-profile","gates":{"one_job":{"passed":true}},"factors":{"need":{"rating":4,"weight":4}},"score":28.5,"recommendation":"build"}`)
+	if _, err := f.queue.Complete(ctx, "assay", g2.Lease, lifecycle.Scored, malformed); err != contract.LogbookRefused {
+		t.Errorf("an evaluation whose score is not an integer: %v", err)
+	}
 	f.want("the second item", f.ask(`SELECT state FROM core.item WHERE item_id = 'PA-0002'`), "observed")
 
 	// The owner goes against the recommendation. Logbook wants a reason.
@@ -378,6 +382,141 @@ func TestEvaluationAndDecision(t *testing.T) {
 	must(f.queue.Complete(ctx, "countersign", d.Lease, lifecycle.Parked, json.RawMessage(`{"reason":"Held until the made-up rule is final."}`)))(t)
 	f.want("the decision", f.ask(`SELECT outcome, reason FROM core.decision`), "park|Held until the made-up rule is final.")
 	f.want("the item", f.ask(`SELECT state FROM core.item WHERE item_id = 'PA-0001'`), "parked")
+}
+
+// Evaluations and decisions live in Logbook's own tables, so later
+// workers still receive results.assay and results.countersign after
+// Muster restarts with an empty memory store.
+func TestEvaluationAndDecisionSurviveRestart(t *testing.T) {
+	f := setup(t,
+		memory.SeedItem{ID: "PA-0001", State: lifecycle.Observed, Lane: lifecycle.Normal, Next: "assay"},
+		memory.SeedItem{ID: "PA-0002", State: lifecycle.Observed, Lane: lifecycle.Normal, Next: "assay"})
+
+	scored := json.RawMessage(`{"profile":"sample-profile",
+		"gates":{"public_source":{"passed":true},"one_job":{"passed":true}},
+		"factors":{"need":{"rating":4,"weight":4},"gap":{"rating":3,"weight":4}},
+		"score":28,"recommendation":"build","split_flag":true}`)
+	g1 := must(f.queue.Lease(ctx, "assay"))(t)
+	must(f.queue.Complete(ctx, "assay", g1.Lease, lifecycle.Scored, scored))(t)
+
+	screened := json.RawMessage(`{"profile":"sample-profile",
+		"gates":{"public_source":{"passed":true},"one_job":{"passed":false,"reason":"More than one made-up job."}}}`)
+	g2 := must(f.queue.Lease(ctx, "assay"))(t)
+	must(f.queue.Complete(ctx, "assay", g2.Lease, lifecycle.ScreenedOut, screened))(t)
+
+	restarted := &queue.Service{Store: f.book.Reopen(t, f.clock.Now), Clock: f.clock.Now, LeaseFor: time.Minute}
+
+	d1 := must(restarted.Lease(ctx, "countersign"))(t)
+	if d1 == nil || d1.ID != "PA-0001" {
+		t.Fatalf("first countersign lease after restart: %+v", d1)
+	}
+	var gotEval struct {
+		Profile        string         `json:"profile"`
+		Gates          map[string]any `json:"gates"`
+		Factors        map[string]any `json:"factors"`
+		Score          *int           `json:"score"`
+		Recommendation *string        `json:"recommendation"`
+		SplitFlag      bool           `json:"split_flag"`
+	}
+	if err := json.Unmarshal(d1.Results["assay"], &gotEval); err != nil {
+		t.Fatalf("results.assay on PA-0001 after restart (%q): %v", d1.Results["assay"], err)
+	}
+	if gotEval.Profile != "sample-profile" || len(gotEval.Gates) != 2 || len(gotEval.Factors) != 2 ||
+		gotEval.Score == nil || *gotEval.Score != 28 ||
+		gotEval.Recommendation == nil || *gotEval.Recommendation != "build" || !gotEval.SplitFlag {
+		t.Errorf("reconstructed scored evaluation: %+v", gotEval)
+	}
+
+	d2 := must(restarted.Lease(ctx, "countersign"))(t)
+	if d2 == nil || d2.ID != "PA-0002" {
+		t.Fatalf("second countersign lease after restart: %+v", d2)
+	}
+	var gotScreened struct {
+		Profile        string         `json:"profile"`
+		Gates          map[string]any `json:"gates"`
+		Factors        map[string]any `json:"factors"`
+		Score          *int           `json:"score"`
+		Recommendation *string        `json:"recommendation"`
+		SplitFlag      bool           `json:"split_flag"`
+	}
+	if err := json.Unmarshal(d2.Results["assay"], &gotScreened); err != nil {
+		t.Fatalf("results.assay on PA-0002 after restart (%q): %v", d2.Results["assay"], err)
+	}
+	if gotScreened.Profile != "sample-profile" || len(gotScreened.Gates) != 2 ||
+		len(gotScreened.Factors) != 0 || gotScreened.Score != nil || gotScreened.Recommendation != nil || gotScreened.SplitFlag {
+		t.Errorf("reconstructed screened_out evaluation: %+v", gotScreened)
+	}
+
+	must(restarted.Complete(ctx, "countersign", d1.Lease, lifecycle.Approved,
+		json.RawMessage(`{"reason":"Approved from the made-up rule."}`)))(t)
+
+	restartedAgain := &queue.Service{Store: f.book.Reopen(t, f.clock.Now), Clock: f.clock.Now, LeaseFor: time.Minute}
+	w := must(restartedAgain.Lease(ctx, "waybill"))(t)
+	if w == nil || w.ID != "PA-0001" {
+		t.Fatalf("waybill lease after second restart: %+v", w)
+	}
+	if len(w.Results["assay"]) == 0 {
+		t.Errorf("waybill missing results.assay after second restart: %+v", w.Results)
+	}
+	var gotDecision struct {
+		Outcome string `json:"outcome"`
+		Reason  string `json:"reason"`
+	}
+	if err := json.Unmarshal(w.Results["countersign"], &gotDecision); err != nil {
+		t.Fatalf("results.countersign after second restart (%q): %v", w.Results["countersign"], err)
+	}
+	if gotDecision.Outcome != "build" || gotDecision.Reason != "Approved from the made-up rule." {
+		t.Errorf("reconstructed decision: %+v", gotDecision)
+	}
+}
+
+// In the cluster Muster logs in directly as the muster role using the
+// password from Secret logbook-credentials, without superuser SET ROLE
+// and without interpolating special characters into MUSTER_DATABASE_URL.
+func TestDirectMusterRoleLoginWithPassword(t *testing.T) {
+	f := setup(t)
+	store := f.book.OpenAsMuster(t, "made-up-pass-@:/?#%-secret", f.clock.Now)
+	q := &queue.Service{Store: store, Clock: f.clock.Now, LeaseFor: time.Minute}
+	take := &intake.Service{
+		Store: store, Clock: f.clock.Now,
+		Secret: []byte("made-up-salt-secret-for-tests-only-0123456789abcdef"), Difficulty: 20, DailyCap: 5,
+	}
+
+	rec := must(take.Record(ctx, "trawl", intake.Candidate{
+		Source:  "sam-gov",
+		Title:   "A made-up notice",
+		Address: "https://example.org/made-up/direct-login-1",
+	}))(t)
+	if rec.ID != "PA-0001" {
+		t.Fatalf("recorded item: %+v", rec)
+	}
+	tr := must(q.Lease(ctx, "trawl"))(t)
+	must(q.Complete(ctx, "trawl", tr.Lease, lifecycle.Recorded, json.RawMessage(`{"source":"sam-gov"}`)))(t)
+	sx := must(q.Lease(ctx, "sextant"))(t)
+	must(q.NeedsSubtool(ctx, "sextant", sx.Lease))(t)
+	if err := store.Update(ctx, func(tx logbook.Tx) error {
+		if n := queue.Replay(tx, "sextant", f.clock.Now()); n != 1 {
+			t.Errorf("replayed %d items, want 1", n)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	sx = must(q.Lease(ctx, "sextant"))(t)
+	must(q.Complete(ctx, "sextant", sx.Lease, lifecycle.Observed, json.RawMessage(`{"job":"made-up job"}`)))(t)
+	as := must(q.Lease(ctx, "assay"))(t)
+	must(q.Complete(ctx, "assay", as.Lease, lifecycle.Scored, json.RawMessage(`{"profile":"sample-profile",
+		"gates":{"one_job":{"passed":true}},
+		"factors":{"need":{"rating":4,"weight":4}},
+		"score":16,"recommendation":"build"}`)))(t)
+	cs := must(q.Lease(ctx, "countersign"))(t)
+	must(q.Complete(ctx, "countersign", cs.Lease, lifecycle.Approved, nil))(t)
+
+	for _, row := range f.ask(`SELECT check_name, failures FROM core.integrity_check()`) {
+		if !strings.HasSuffix(row, "|0") {
+			t.Errorf("integrity check: %s", row)
+		}
+	}
 }
 
 // After a story of every kind of call, Logbook's own integrity check

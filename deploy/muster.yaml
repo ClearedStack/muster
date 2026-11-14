@@ -1,0 +1,173 @@
+# Muster runs in namespace clearedstack (created by Logbook).
+#
+# Two Secrets must exist in clearedstack before Muster starts; neither is
+# stored in Git:
+#   1. logbook-credentials (key: muster-password) - created for Logbook's
+#      migration job and shared with Muster.
+#   2. muster-credentials (key: salt) - at least 32 random bytes used to
+#      derive the daily visitor-hash salt for edit intake, e.g.:
+#        kubectl -n clearedstack create secret generic muster-credentials \
+#          --from-literal=salt="$(head -c 32 /dev/urandom | base64)"
+#
+# Image digest is a placeholder until Keelworks builds and signs the ko
+# image into Lazarette and updates this manifest.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: muster-ownership
+  namespace: clearedstack
+  labels:
+    app.kubernetes.io/name: muster
+    app.kubernetes.io/part-of: clearedstack
+    app.kubernetes.io/component: control-plane
+data:
+  ownership_map.json: |
+    {"elements":{}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: muster
+  namespace: clearedstack
+  labels:
+    app.kubernetes.io/name: muster
+    app.kubernetes.io/part-of: clearedstack
+    app.kubernetes.io/component: control-plane
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: muster
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: http
+    - name: http-alt
+      protocol: TCP
+      port: 8080
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: muster
+  namespace: clearedstack
+  labels:
+    app.kubernetes.io/name: muster
+    app.kubernetes.io/part-of: clearedstack
+    app.kubernetes.io/component: control-plane
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: muster
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: muster
+        app.kubernetes.io/part-of: clearedstack
+        app.kubernetes.io/component: control-plane
+    spec:
+      serviceAccountName: muster
+      automountServiceAccountToken: true
+      enableServiceLinks: false
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/arch
+                    operator: In
+                    values:
+                      - arm64
+                  - key: kubernetes.io/hostname
+                    operator: NotIn
+                    values:
+                      - cm3588-plus
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: muster
+          image: lazarette.clearedstack.svc.cluster.local:5000/muster@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: MUSTER_LISTEN
+              value: ":8080"
+            - name: MUSTER_AUTH
+              value: "kubernetes"
+            - name: MUSTER_OWNERSHIP_MAP
+              value: "/etc/muster/ownership/ownership_map.json"
+            - name: MUSTER_SALT_FILE
+              value: "/var/run/secrets/muster/salt"
+            - name: MUSTER_DATABASE_URL
+              value: "postgres://muster@logbook.clearedstack.svc.cluster.local:5432/logbook?sslmode=disable"
+            - name: MUSTER_DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: logbook-credentials
+                  key: muster-password
+            - name: GOMEMLIMIT
+              value: "36MiB"
+          resources:
+            requests:
+              cpu: 20m
+              memory: 48Mi
+            limits:
+              cpu: 200m
+              memory: 48Mi
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 10
+            timeoutSeconds: 2
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 15
+            timeoutSeconds: 2
+          securityContext:
+            privileged: false
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            capabilities:
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: ownership
+              mountPath: /etc/muster/ownership
+              readOnly: true
+            - name: salt
+              mountPath: /var/run/secrets/muster
+              readOnly: true
+      volumes:
+        - name: ownership
+          configMap:
+            name: muster-ownership
+            defaultMode: 0440
+        - name: salt
+          secret:
+            secretName: muster-credentials
+            defaultMode: 0400
+            items:
+              - key: salt
+                path: salt

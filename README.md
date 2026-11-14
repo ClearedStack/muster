@@ -12,7 +12,7 @@
 
 ---
 
-> **Status: first build.** Muster runs alone on an in-memory stand-in for Logbook, and against Logbook's schema in PostgreSQL. Its tests pass on both. It has not been run in a cluster, and Logbook's schema has no place yet for some of what Muster keeps. [What works today](#what-works-today) and [Not yet done](#not-yet-done) say exactly where it stands.
+> **Status: ready to deploy.** Muster runs alone on an in-memory stand-in for Logbook, and against Logbook's schema in PostgreSQL. Its tests pass on both, and hardened Kubernetes manifests live under [`deploy/`](deploy). It has not yet been deployed to a cluster, and Logbook's schema has no place yet for some of what Muster keeps. [What works today](#what-works-today) and [Not yet done](#not-yet-done) say exactly where it stands.
 
 Muster is a control-plane service of the ClearedStack platform. ClearedStack is an open pipeline that finds ideas for government-contracting tools, screens and scores them, and builds each one from the public rule. Muster is meant to be understood and used without the rest.
 
@@ -27,6 +27,8 @@ Muster is a control-plane service of the ClearedStack platform. ClearedStack is 
 | [`component.json`](component.json) | This component’s entry in the ClearedStack naming registry. |
 | [`cmd/muster`](cmd/muster) | The program. |
 | [`internal/`](internal) | Its parts, one package each. See [Layout](#layout). |
+| [`deploy/`](deploy) | Kubernetes manifests: ServiceAccount and TokenReview RBAC, default-deny NetworkPolicy, ConfigMap, Service and Deployment. |
+| [`kustomization.yaml`](kustomization.yaml) | Assembles the manifests in `deploy/`. |
 | [`examples/seed.json`](examples/seed.json) | Eight made-up items to start the stand-in with when trying Muster by hand. |
 | [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) | The licence notices of pgx and the three modules it brings. |
 | [`.ko.yaml`](.ko.yaml) | How `ko` builds the image from source. There is no Dockerfile. |
@@ -147,6 +149,7 @@ All settings come from the environment. One that is missing where it is required
 | `MUSTER_OWNERSHIP_MAP` | required | Path of `ownership_map.json` |
 | `MUSTER_SALT_FILE` | required | Path of the secret the daily salt is made from; at least 32 bytes |
 | `MUSTER_DATABASE_URL` | | Where Logbook is, as a PostgreSQL address for the `muster` role. Without it Muster uses the in-memory stand-in |
+| `MUSTER_DATABASE_PASSWORD` | | Password for the `muster` role when kept in a separate Secret instead of `MUSTER_DATABASE_URL` |
 | `MUSTER_SEED_FILE` | | Made-up items to start the stand-in with. Not allowed with `MUSTER_DATABASE_URL` |
 | `MUSTER_LISTEN` | `:8080` | Address to listen on |
 | `MUSTER_LEASE_SECONDS` | `60` | How long a lease protects a step |
@@ -155,11 +158,14 @@ All settings come from the environment. One that is missing where it is required
 | `MUSTER_POW_BITS` | `20` | Zero bits the proof of work must show |
 | `MUSTER_EDIT_DAILY_CAP` | `5` | Submissions kept per visitor per day, edit proposals and site-form candidates together |
 
-### Build the image
+### Build the image and manifests
 
 ```sh
 ko build ./cmd/muster
+kubectl kustomize .
 ```
+
+The manifests under [`deploy/`](deploy) expect two Secrets in namespace `clearedstack`, neither kept in Git: `logbook-credentials` (`muster-password`, shared with Logbook) and `muster-credentials` (`salt`, at least 32 random bytes).
 
 ## Tests
 

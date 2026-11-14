@@ -80,12 +80,22 @@ var _ logbook.Store = (*Store)(nil)
 // transaction does. An address that cannot be read is refused without
 // being repeated, since it can hold a password.
 func Open(url string, clock func() time.Time) (*Store, error) {
+	return OpenWithPassword(url, "", clock)
+}
+
+// OpenWithPassword is Open, with a password kept separate from the
+// address so that characters in the secret need not be escaped for a
+// URL. An empty password leaves whatever the address or environment gave.
+func OpenWithPassword(url, password string, clock func() time.Time) (*Store, error) {
 	config, err := pgx.ParseConfig(url)
 	if err != nil {
 		return nil, errors.New("MUSTER_DATABASE_URL is not a database address")
 	}
-	// The simple protocol sends each statement whole, with no prepared
-	// statements to keep track of across reconnections.
+	if password != "" {
+		config.Password = password
+	}
+	// Each statement goes in one round trip with no prepared statements
+	// kept on the connection across reconnections.
 	config.DefaultQueryExecMode = pgx.QueryExecModeExec
 	return &Store{config: config, clock: clock, beside: memory.New()}, nil
 }
@@ -262,7 +272,26 @@ func (t *tx) Item(id string) (logbook.Item, bool) {
 	if pauseID != nil {
 		it.PausedBy, it.PausedFrom, it.PausedSeq = *pausedBy, lifecycle.State(*pausedFrom), uint64(*pauseID)
 	}
+	if _, ok := it.Results["assay"]; !ok {
+		if raw, found := t.storedEvaluation(id); found {
+			it.Results = putResult(it.Results, "assay", raw)
+		}
+	}
+	if _, ok := it.Results["countersign"]; !ok {
+		if raw, found := t.storedDecision(id); found {
+			it.Results = putResult(it.Results, "countersign", raw)
+		}
+	}
 	return it, true
+}
+
+func putResult(old map[string]json.RawMessage, worker string, raw json.RawMessage) map[string]json.RawMessage {
+	next := make(map[string]json.RawMessage, len(old)+1)
+	for k, v := range old {
+		next[k] = v
+	}
+	next[worker] = raw
+	return next
 }
 
 func (t *tx) AddItem(v logbook.Item) (string, bool) {
@@ -663,6 +692,13 @@ func (t *tx) Append(r logbook.Record) uint64 {
 // the result is an evaluation: that is, when it has gates. Logbook
 // checks the row and refuses one that is not well formed.
 func (t *tx) Evaluation(itemID string, result json.RawMessage) {
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(result, &fields) != nil {
+		return
+	}
+	if _, ok := fields["gates"]; !ok {
+		return
+	}
 	var e struct {
 		Profile        string          `json:"profile"`
 		Gates          json.RawMessage `json:"gates"`
@@ -671,7 +707,8 @@ func (t *tx) Evaluation(itemID string, result json.RawMessage) {
 		Recommendation *string         `json:"recommendation"`
 		SplitFlag      bool            `json:"split_flag"`
 	}
-	if json.Unmarshal(result, &e) != nil || e.Gates == nil {
+	if json.Unmarshal(result, &e) != nil {
+		t.fail(contract.LogbookRefused)
 		return
 	}
 	if e.Factors == nil {
@@ -681,6 +718,45 @@ func (t *tx) Evaluation(itemID string, result json.RawMessage) {
 		INSERT INTO core.evaluation (item_id, profile, gates, factors, score, recommendation, split_flag, evaluated_at)
 		VALUES ($1, $2, $3::jsonb, $4::jsonb, $5, $6, $7, $8)`,
 		itemID, e.Profile, string(e.Gates), string(e.Factors), e.Score, e.Recommendation, e.SplitFlag, t.now)
+}
+
+func (t *tx) storedEvaluation(itemID string) (json.RawMessage, bool) {
+	var profile, gates, factors string
+	var score *int
+	var recommendation *string
+	var splitFlag bool
+	if !t.one([]any{&profile, &gates, &factors, &score, &recommendation, &splitFlag}, `
+		SELECT profile, gates::text, factors::text, score, recommendation, split_flag
+		FROM core.evaluation
+		WHERE item_id = $1
+		ORDER BY evaluation_id DESC
+		LIMIT 1`, itemID) {
+		return nil, false
+	}
+	var fac json.RawMessage
+	if factors != "{}" {
+		fac = json.RawMessage(factors)
+	}
+	raw, err := json.Marshal(struct {
+		Profile        string          `json:"profile"`
+		Gates          json.RawMessage `json:"gates"`
+		Factors        json.RawMessage `json:"factors,omitempty"`
+		Score          *int            `json:"score,omitempty"`
+		Recommendation *string         `json:"recommendation,omitempty"`
+		SplitFlag      bool            `json:"split_flag"`
+	}{
+		Profile:        profile,
+		Gates:          json.RawMessage(gates),
+		Factors:        fac,
+		Score:          score,
+		Recommendation: recommendation,
+		SplitFlag:      splitFlag,
+	})
+	if err != nil {
+		t.fail(contract.Unexpected)
+		return nil, false
+	}
+	return raw, true
 }
 
 // Decision adds the owner's decision to the decision trail of the item's
@@ -699,6 +775,31 @@ func (t *tx) Decision(itemID, outcome, reason string) {
 	}
 	t.exec(`INSERT INTO core.decision (evaluation_id, outcome, reason, decided_at) VALUES ($1, $2, $3, $4)`,
 		evaluation, outcome, why, t.now)
+}
+
+func (t *tx) storedDecision(itemID string) (json.RawMessage, bool) {
+	var outcome, reason string
+	if !t.one([]any{&outcome, &reason}, `
+		SELECT d.outcome, coalesce(d.reason, '')
+		FROM core.decision d
+		JOIN core.evaluation e ON e.evaluation_id = d.evaluation_id
+		WHERE e.item_id = $1
+		ORDER BY d.decision_id DESC
+		LIMIT 1`, itemID) {
+		return nil, false
+	}
+	raw, err := json.Marshal(struct {
+		Outcome string `json:"outcome"`
+		Reason  string `json:"reason,omitempty"`
+	}{
+		Outcome: outcome,
+		Reason:  reason,
+	})
+	if err != nil {
+		t.fail(contract.Unexpected)
+		return nil, false
+	}
+	return raw, true
 }
 
 // ---------------------------------------------------------------------
