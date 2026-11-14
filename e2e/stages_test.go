@@ -49,6 +49,10 @@ func (e *env) drive(t *testing.T, name string, limit time.Duration, start func()
 				e.showLog(t, p)
 				return
 			}
+			if st, _, err := e.item(e.itemID); err == nil && (st == "rejected" || st == "retired") {
+				t.Fatalf("%s took the item to %q, an end state, so it will go no further.\n%s\n--- %s output (last lines) ---\n%s",
+					name, st, e.evidence(e.itemID), name, e.tail(p, 20))
+			}
 			if p.exit != nil || runs >= 6 {
 				t.Fatalf("%s stopped before the item got where it should (exit: %v, runs: %d).\nwhere the item is: %s\n%s\n--- %s output (last lines) ---\n%s",
 					name, p.exit, runs, where, e.evidence(e.itemID), name, e.tail(p, 20))
@@ -89,28 +93,36 @@ func (e *env) spool(name string) string {
 
 // stageTrawl records the candidate and has Trawl record it.
 //
-// Trawl cannot be given a local source: its fetcher refuses loopback and
-// private addresses (trawl internal/fetch/fetch.go:121). So the harness makes
+// Trawl does not sweep a local source (its fetcher refuses loopback and
+// private addresses, trawl internal/fetch/fetch.go:121), so the harness makes
 // the find itself, with POST /v1/items as the trawl caller, which is the call
-// Trawl's own sweep makes, and then runs the real Trawl binary to lease and
-// record it.
+// Trawl's own sweep makes. The real Trawl then leases the item and checks it.
+// The address is on the local page server, because that is the only kind of
+// address Sextant will fetch with SEXTANT_LOCAL_TEST_ORIGIN; Trawl refuses it
+// (host_not_public) and ends the item as rejected. That is a finding, and
+// E2E_STAND_IN=trawl lets the run go on past it.
 func stageTrawl(e *env, t *testing.T) {
 	status, body, err := e.call("trawl", "POST", "/v1/items", map[string]any{
 		"contract": "v1",
 		"source":   "web-sweep",
 		"title":    "Wrap rate calculator",
-		"address":  itemAddress,
+		"address":  e.itemAddress(),
 	})
 	if err != nil || status != 201 {
-		t.Fatalf("POST /v1/items as trawl: status %d, body %v, error %v", status, body, err)
+		t.Fatalf("POST /v1/items as trawl with a local address: status %d, body %v, error %v", status, body, err)
 	}
 	id, _ := body["id"].(string)
 	if id == "" {
 		t.Fatalf("POST /v1/items gave no id: %v", body)
 	}
 	e.itemID = id
-	t.Logf("item %s recorded through POST /v1/items as the trawl caller (Trawl cannot take a local source)", id)
+	t.Logf("item %s recorded through POST /v1/items as the trawl caller; Muster accepted the local address", id)
+	e.notes["trawl"] = "intake by harness"
 
+	if e.standIn("trawl") {
+		e.standInTrawl(t)
+		return
+	}
 	e.drive(t, "trawl", 40*time.Second, func() *proc {
 		return e.start("trawl", filepath.Join(e.bin, "trawl"), []string{
 			"work", "-muster-url", e.musterURL,
@@ -120,10 +132,29 @@ func stageTrawl(e *env, t *testing.T) {
 	}, e.reaches("recorded", "sextant"))
 }
 
+// standInTrawl does what Trawl's work loop does to Muster for a clean item,
+// by hand. It is a diagnostic only: nothing in it is Trawl.
+func (e *env) standInTrawl(t *testing.T) {
+	status, lease, err := e.call("trawl", "POST", "/v1/lease", map[string]any{"contract": "v1"})
+	if err != nil || status != 200 {
+		t.Fatalf("stand-in: lease as trawl: status %d, %v, %v", status, lease, err)
+	}
+	status, body, err := e.call("trawl", "POST", "/v1/complete", map[string]any{
+		"contract": "v1", "lease": lease["lease"], "state": "recorded",
+		"result": map[string]any{"source": "web-sweep", "address": e.itemAddress(), "title": "Wrap rate calculator"},
+	})
+	if err != nil || status != 200 {
+		t.Fatalf("stand-in: complete as trawl: status %d, %v, %v", status, body, err)
+	}
+	e.standIns = append(e.standIns, "trawl")
+	t.Logf("STAND-IN: Trawl did not record the item. The harness completed its step.")
+}
+
 // standIn reports whether the run was asked to stand in for a stage's worker
-// (E2E_STAND_IN=sextant). Only Sextant can be stood in for, and only to see
-// how far the later workers get when Sextant cannot run. A run that stands in
-// for any worker is a diagnostic and never passes: see the end of the test.
+// (E2E_STAND_IN=trawl, sextant or trawl,sextant). Only these two can be stood
+// in for, and only to see how far the later workers get when one of them
+// cannot run. A run that stands in for any worker is a diagnostic and never
+// passes: see the end of the test.
 func (e *env) standIn(worker string) bool {
 	for _, w := range strings.Split(os.Getenv("E2E_STAND_IN"), ",") {
 		if strings.TrimSpace(w) == worker {
@@ -135,11 +166,10 @@ func (e *env) standIn(worker string) bool {
 
 // stageSextant has Sextant read the page and report what job it does.
 //
-// Sextant fetches only https pages on public hosts and refuses loopback,
-// private and cluster addresses before it connects (sextant
-// internal/fetch/fetch.go, validateTargetURL and checkDialAddress), and its
-// proxy setting is checked the same way, so a page on this machine cannot be
-// read by it. That is a finding when it stops the stage.
+// Sextant fetches only public https pages. For a test run it has one
+// exception, SEXTANT_LOCAL_TEST_ORIGIN, which names one http://127.0.0.1:port
+// origin; the harness names the page server's. A Sextant built without that
+// setting refuses the page and this stage fails with what it observed.
 func stageSextant(e *env, t *testing.T) {
 	if e.standIn("sextant") {
 		e.standInSextant(t)
@@ -147,7 +177,7 @@ func stageSextant(e *env, t *testing.T) {
 	}
 	defer func() {
 		if t.Failed() {
-			t.Log("FINDING: Sextant reads only https pages on public hosts and refuses loopback, private and cluster addresses before it connects (sextant internal/fetch/fetch.go, validateTargetURL), so a page on this machine cannot be read by it and this stage cannot pass locally. Run with E2E_STAND_IN=sextant to see how far the later workers get.")
+			t.Log(e.sextantObservation())
 		}
 	}()
 	e.drive(t, "sextant", 25*time.Second, func() *proc {
@@ -156,8 +186,46 @@ func stageSextant(e *env, t *testing.T) {
 			"-token-file", e.tokenFile("sextant"),
 			"-spool", e.spool("sextant"),
 			"-poll-every", "300ms", "-fetch-timeout", "5s", "-drain",
-		})
+		}, "SEXTANT_LOCAL_TEST_ORIGIN="+e.pageURL)
 	}, e.reaches("observed", "assay"))
+}
+
+// sextantObservation says what the ledger and Sextant's own output show about
+// a failed Sextant stage, and nothing else: the cause is not assumed.
+func (e *env) sextantObservation() string {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	var n int
+	var code, note string
+	if err := e.db.Admin.QueryRow(ctx, `
+		SELECT count(*), coalesce(max(error_code), ''), coalesce(max(note), '')
+		FROM core.ledger WHERE item_id = $1 AND actor = 'sextant'`, e.itemID).Scan(&n, &code, &note); err != nil {
+		return "OBSERVED: the ledger could not be read: " + e.scrub(err.Error())
+	}
+	// The reason is in the output of whichever run met the failure: look
+	// through every Sextant run, latest first.
+	reason := ""
+	logs, _ := filepath.Glob(filepath.Join(e.root, "logs", "sextant-*.log"))
+	for i := len(logs) - 1; i >= 0 && reason == ""; i-- {
+		raw, err := os.ReadFile(logs[i])
+		if err != nil {
+			continue
+		}
+		lines := strings.Split(strings.TrimSpace(string(raw)), "\n")
+		for j := len(lines) - 1; j >= 0 && reason == ""; j-- {
+			var ev struct {
+				Reason string `json:"reason"`
+			}
+			if json.Unmarshal([]byte(lines[j]), &ev) == nil {
+				reason = ev.Reason
+			}
+		}
+	}
+	if reason == "" {
+		reason = "none in its output"
+	}
+	return e.scrub(fmt.Sprintf("OBSERVED: Sextant made %d ledger rows for %s; error code %q, note %q; its own reason %q; SEXTANT_LOCAL_TEST_ORIGIN was %s.",
+		n, e.itemID, code, note, reason, e.pageURL))
 }
 
 // standInSextant does what Sextant's work loop does to Muster, by hand, with
@@ -195,6 +263,16 @@ func stageAssay(e *env, t *testing.T) {
 			"ASSAY_POLL_INTERVAL=300ms",
 		)
 	}, e.reaches("scored", "countersign"))
+	// Reported, not asserted: what Assay made of the item.
+	var rec string
+	var score int
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := e.db.Admin.QueryRow(ctx, `SELECT recommendation, score FROM pub.evaluation WHERE item_id = $1`, e.itemID).Scan(&rec, &score); err == nil {
+		e.notes["assay"] = fmt.Sprintf("recommendation %q, score %d", rec, score)
+	} else {
+		e.notes["assay"] = "no evaluation on record"
+	}
 }
 
 // stageCountersign leases the scored item with the real Countersign, then
@@ -229,6 +307,7 @@ func stageCountersign(e *env, t *testing.T) {
 		t.Fatalf("countersign decide %s approve -waybill ...: %v\n%s\n%s", e.itemID, err, out, e.evidence(e.itemID))
 	}
 	e.drive(t, "countersign", 25*time.Second, func() *proc { return p }, e.reaches("approved", "waybill"))
+	e.notes["countersign"] = "owner decision by harness"
 }
 
 func stageWaybill(e *env, t *testing.T) {
@@ -305,43 +384,48 @@ func stageOutcome(e *env, t *testing.T) {
 		bad("item %s: state=%q queued_for=[%s] err=%v, want live with a step for tidegauge", e.itemID, state, queued, err)
 	}
 
+	// A git failure is a failure of the check, never a clean result.
+	mustGit := func(repo string, args ...string) string {
+		out, err := e.git(repo, args...)
+		if err != nil {
+			bad("git %s in %s failed: %v", args[0], repo, err)
+		}
+		return out
+	}
+
 	// The hub: the catalog branch holds the entry, main is untouched.
-	if out, err := e.git(hubRepo, "rev-parse", "--verify", "refs/heads/catalog/"+toolRepo); err != nil {
-		bad("the hub has no refs/heads/catalog/%s: %v %s", toolRepo, err, strings.TrimSpace(out))
+	if _, err := e.git(hubRepo, "rev-parse", "--verify", "refs/heads/catalog/"+toolRepo); err != nil {
+		bad("the hub has no refs/heads/catalog/%s: %v", toolRepo, err)
 	} else if tools, err := e.git(hubRepo, "show", "refs/heads/catalog/"+toolRepo+":catalog/tools.json"); err != nil {
-		bad("the catalog branch has no catalog/tools.json: %v %s", err, strings.TrimSpace(tools))
+		bad("the catalog branch has no catalog/tools.json: %v", err)
 	} else if !strings.Contains(tools, `"`+toolRepo+`"`) {
 		bad("catalog/tools.json on the catalog branch does not name %s", toolRepo)
 	}
-	if out, _ := e.git(hubRepo, "rev-parse", "refs/heads/main"); strings.TrimSpace(out) != e.hubMain {
+	if out := mustGit(hubRepo, "rev-parse", "refs/heads/main"); strings.TrimSpace(out) != e.hubMain {
 		bad("main in the hub moved: was %s, is %s", e.hubMain, strings.TrimSpace(out))
 	}
-	if out, _ := e.git(hubRepo, "for-each-ref", "--format=%(refname)"); strings.Fields(out) == nil || len(strings.Fields(out)) != 2 {
-		bad("the hub should have exactly main and the catalog branch, it has: %s", strings.Join(strings.Fields(out), " "))
+	if hubRefs := strings.Fields(mustGit(hubRepo, "for-each-ref", "--format=%(refname)")); len(hubRefs) != 2 {
+		bad("the hub should have exactly main and the catalog branch, it has: %s", strings.Join(hubRefs, " "))
 	}
 
 	// Moldloft pushed the generated tool repository, and nothing of the page
-	// is in it.
-	refs, _ := e.git(toolRepo, "for-each-ref", "--format=%(refname)")
-	if len(strings.Fields(refs)) == 0 {
+	// is in it: not in any file of any revision (binary or not), not in a
+	// name, not in a commit.
+	refs := strings.Fields(mustGit(toolRepo, "for-each-ref", "--format=%(refname)"))
+	if len(refs) == 0 {
 		bad("Moldloft pushed nothing to %s/%s", org, toolRepo)
 	}
 	files := 0
-	for _, ref := range strings.Fields(refs) {
-		names, _ := e.git(toolRepo, "ls-tree", "-r", "--name-only", ref)
-		files += len(strings.Fields(names))
-		if strings.Contains(names, canary) {
-			bad("the canary is in a file name on %s", ref)
-		}
-		if out, err := e.git(toolRepo, "grep", "-I", "-l", "-F", canary, ref); err == nil {
-			bad("the canary is in %s on %s", strings.Join(strings.Fields(out), ", "), ref)
-		}
+	for _, ref := range refs {
+		files += len(strings.Fields(mustGit(toolRepo, "ls-tree", "-r", "--name-only", ref)))
 	}
-	if log, _ := e.git(toolRepo, "log", "--all", "--format=%an %ae %cn %ce %B"); strings.Contains(log, canary) {
-		bad("the canary is in a commit of the tool repository")
-	}
-	if len(strings.Fields(refs)) > 0 && files == 0 {
+	if len(refs) > 0 && files == 0 {
 		bad("the tool repository holds no files, so the canary check proved nothing")
+	}
+	if hits, err := scanCanary(e.bare(toolRepo), canary); err != nil {
+		bad("the canary scan of the tool repository failed: %v", err)
+	} else if len(hits) > 0 {
+		bad("the canary is in the tool repository: %s", strings.Join(hits, "; "))
 	}
 	if page, err := os.ReadFile(filepath.Join("testdata", "wrap-rate", "page.html")); err != nil || !strings.Contains(string(page), canary) {
 		bad("the invented page does not carry the canary, so the canary check proves nothing")
