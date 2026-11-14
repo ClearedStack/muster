@@ -1,28 +1,24 @@
 // Package sql is Logbook itself: the store kept in PostgreSQL, reached
 // with the muster role.
 //
-// It keeps in Logbook everything Logbook has a place for:
+// Everything Muster keeps lives in Logbook's tables (migrations 0001 to
+// 0010), so nothing is held in process memory beside the database and
+// nothing is lost when Muster restarts:
 //
-//	core.item           an item's state, title and address
-//	core.queue          the queue: each step, its lane, its lease
-//	core.ledger         every change of state, failure, pause and release
-//	core.pause          which worker paused an item, and from which state
-//	core.edit_proposal  a proposal's element, repository, class, text and status
-//	core.evaluation     what Assay found, when its result is an evaluation
-//	core.decision       what the owner decided about an evaluated item
+//	core.item              an item's state, title, address and source
+//	core.queue             each step, its lane, whether it is held, and its lease
+//	core.ledger            every change of state, failure, pause and release
+//	core.pause             which worker paused an item, and from which state
+//	core.edit_proposal     a proposal's element, repository, class, text, reason, file and status
+//	core.result            the latest JSON object each worker returned for an item or proposal
+//	core.lease_outcome     how the last lease on each subject ended, for repeated calls
+//	core.evaluation        what Assay found, when its result is an evaluation
+//	core.decision          what the owner decided about an evaluated item
+//	core.component_health  each component's latest health state, error code and image digest
+//	core.submission_count  daily salted visitor submission counts
 //
 // Logbook gives out every identifier. A new item is inserted without
 // one, and an address already on record returns the item that has it.
-//
-// A few things Muster needs have no column in Logbook yet. They are kept
-// beside it, in this process, and are lost when it stops:
-//
-//   - the result each worker gave, other than an evaluation or a decision
-//   - the source an item was found through
-//   - a proposal's reason and the file its element lives in
-//   - the answer to the call that ended each subject's last lease
-//   - the latest health and image digest of each component
-//   - the day's count of submissions for each visitor
 //
 // Every transaction runs alone: one at a time, on one connection. Muster
 // is one pod and the only writer, so nothing is lost by it, and a change
@@ -34,22 +30,23 @@
 package sql
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/ClearedStack/muster/internal/contract"
 	"github.com/ClearedStack/muster/internal/lifecycle"
 	"github.com/ClearedStack/muster/internal/logbook"
-	"github.com/ClearedStack/muster/internal/logbook/memory"
 )
 
 // incidentWorker is the worker whose steps on an item are incident
@@ -57,21 +54,20 @@ import (
 // Bellbuoy has no other step on an item, so the worker tells the kind.
 const incidentWorker = "bellbuoy"
 
-// heldToken is the lease a stopped step is given. With an end that never
-// comes, it keeps the step from being offered until the owner releases
-// it, and keeps the step's place and its count of attempts on record.
-const heldToken = "ffffffff-ffff-ffff-ffff-ffffffffffff"
-
 // pausePattern is what Muster writes where Logbook asks for the pattern
 // of an unfamiliar case. The contract's needs_subtool call carries none.
 const pausePattern = "not given"
 
+// keysPerDay caps how many distinct visitor hashes one UTC day keeps in
+// core.submission_count, matching the in-memory stand-in's bound.
+const keysPerDay = 8192
+
 // Store is Logbook.
 type Store struct {
+	mu     sync.Mutex
 	config *pgx.ConnConfig
 	clock  func() time.Time
-	beside *memory.Store
-	conn   *pgx.Conn // used only inside a transaction, which holds beside's lock
+	conn   *pgx.Conn
 }
 
 var _ logbook.Store = (*Store)(nil)
@@ -97,15 +93,14 @@ func OpenWithPassword(url, password string, clock func() time.Time) (*Store, err
 	// Each statement goes in one round trip with no prepared statements
 	// kept on the connection across reconnections.
 	config.DefaultQueryExecMode = pgx.QueryExecModeExec
-	return &Store{config: config, clock: clock, beside: memory.New()}, nil
+	return &Store{config: config, clock: clock}, nil
 }
 
 // Close ends the connection.
 func (s *Store) Close(ctx context.Context) {
-	_ = s.beside.Update(ctx, func(logbook.Tx) error {
-		s.drop(ctx)
-		return nil
-	})
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.drop(ctx)
 }
 
 func (s *Store) drop(ctx context.Context) {
@@ -117,15 +112,21 @@ func (s *Store) drop(ctx context.Context) {
 
 // Update runs fn in one PostgreSQL transaction.
 func (s *Store) Update(ctx context.Context, fn func(logbook.Tx) error) error {
-	return s.beside.Update(ctx, func(beside logbook.Tx) error { return s.run(ctx, beside, fn, true) })
+	return s.run(ctx, fn, true)
 }
 
 // View runs fn in a transaction that is always rolled back.
 func (s *Store) View(ctx context.Context, fn func(logbook.Tx) error) error {
-	return s.beside.View(ctx, func(beside logbook.Tx) error { return s.run(ctx, beside, fn, false) })
+	return s.run(ctx, fn, false)
 }
 
-func (s *Store) run(ctx context.Context, beside logbook.Tx, fn func(logbook.Tx) error, keep bool) error {
+func (s *Store) run(ctx context.Context, fn func(logbook.Tx) error, keep bool) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	if s.conn == nil || s.conn.IsClosed() {
 		conn, err := pgx.ConnectConfig(ctx, s.config)
 		if err != nil {
@@ -138,7 +139,7 @@ func (s *Store) run(ctx context.Context, beside logbook.Tx, fn func(logbook.Tx) 
 		s.drop(ctx)
 		return translate(ctx, err)
 	}
-	t := &tx{ctx: ctx, pg: pg, beside: beside, now: s.clock().UTC()}
+	t := &tx{ctx: ctx, pg: pg, now: s.clock().UTC()}
 	err = fn(t)
 	if err == nil {
 		err = t.err
@@ -192,11 +193,10 @@ func translate(ctx context.Context, err error) error {
 }
 
 type tx struct {
-	ctx    context.Context
-	pg     pgx.Tx
-	beside logbook.Tx
-	now    time.Time
-	err    error // the first failure; nothing is done after it
+	ctx context.Context
+	pg  pgx.Tx
+	now time.Time
+	err error // the first failure; nothing is done after it
 }
 
 func (t *tx) fail(err error) {
@@ -242,6 +242,21 @@ func (t *tx) strings(query string, args ...any) []string {
 	return out
 }
 
+func optionalString(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
+func compactJSON(s string) json.RawMessage {
+	var buf bytes.Buffer
+	if json.Compact(&buf, []byte(s)) != nil {
+		return json.RawMessage(s)
+	}
+	return json.RawMessage(buf.Bytes())
+}
+
 // ---------------------------------------------------------------------
 // Items
 // ---------------------------------------------------------------------
@@ -250,11 +265,12 @@ func (t *tx) Item(id string) (logbook.Item, bool) {
 	if !lifecycle.IsItemID(id) {
 		return logbook.Item{}, false
 	}
-	var state, title, address string
+	var state, title, address, source string
 	var lane, pausedBy, pausedFrom *string
 	var pauseID *int64
-	if !t.one([]any{&state, &title, &address, &lane, &pausedBy, &pausedFrom, &pauseID}, `
-		SELECT i.state, i.title, coalesce(i.address, ''), q.lane, p.worker, p.paused_from, p.pause_id
+	if !t.one([]any{&state, &title, &address, &source, &lane, &pausedBy, &pausedFrom, &pauseID}, `
+		SELECT i.state, i.title, coalesce(i.address, ''), coalesce(i.source, ''),
+		       q.lane, p.worker, p.paused_from, p.pause_id
 		FROM core.item i
 		LEFT JOIN core.queue q ON q.item_id = i.item_id AND q.worker <> $2
 		LEFT JOIN core.pause p ON p.item_id = i.item_id AND p.replayed_at IS NULL
@@ -263,41 +279,27 @@ func (t *tx) Item(id string) (logbook.Item, bool) {
 		LIMIT 1`, id, incidentWorker) {
 		return logbook.Item{}, false
 	}
-	it, _ := t.beside.Item(id)
-	it.ID, it.State, it.Title, it.Address = id, lifecycle.State(state), title, address
+	it := logbook.Item{
+		ID:      id,
+		State:   lifecycle.State(state),
+		Title:   title,
+		Address: address,
+		Source:  source,
+	}
 	if lane != nil {
 		it.Lane = lifecycle.Lane(*lane)
 	}
-	it.PausedBy, it.PausedFrom, it.PausedSeq = "", "", 0
 	if pauseID != nil {
 		it.PausedBy, it.PausedFrom, it.PausedSeq = *pausedBy, lifecycle.State(*pausedFrom), uint64(*pauseID)
 	}
-	if _, ok := it.Results["assay"]; !ok {
-		if raw, found := t.storedEvaluation(id); found {
-			it.Results = putResult(it.Results, "assay", raw)
-		}
-	}
-	if _, ok := it.Results["countersign"]; !ok {
-		if raw, found := t.storedDecision(id); found {
-			it.Results = putResult(it.Results, "countersign", raw)
-		}
-	}
+	it.Results = t.itemResults(id)
+	it.Done, it.IncidentDone = t.itemOutcomes(id)
 	return it, true
 }
 
-func putResult(old map[string]json.RawMessage, worker string, raw json.RawMessage) map[string]json.RawMessage {
-	next := make(map[string]json.RawMessage, len(old)+1)
-	for k, v := range old {
-		next[k] = v
-	}
-	next[worker] = raw
-	return next
-}
-
 func (t *tx) AddItem(v logbook.Item) (string, bool) {
-	var address *string
-	if v.Address != "" {
-		address = &v.Address
+	address := optionalString(v.Address)
+	if address != nil {
 		var id string
 		if t.one([]any{&id}, `SELECT item_id FROM core.item WHERE address_sha256 = core.address_sha256($1)`, v.Address) {
 			return id, true
@@ -308,9 +310,9 @@ func (t *tx) AddItem(v logbook.Item) (string, bool) {
 	// and the row that has it is returned.
 	var id string
 	if !t.one([]any{&id}, `
-		INSERT INTO core.item (state, title, address) VALUES ($1, $2, $3)
+		INSERT INTO core.item (state, title, address, source) VALUES ($1, $2, $3, $4)
 		ON CONFLICT (address_sha256) DO NOTHING
-		RETURNING item_id`, string(v.State), v.Title, address) {
+		RETURNING item_id`, string(v.State), v.Title, address, optionalString(v.Source)) {
 		if address == nil || !t.one([]any{&id}, `SELECT item_id FROM core.item WHERE address_sha256 = core.address_sha256($1)`, v.Address) {
 			return "", false
 		}
@@ -319,27 +321,30 @@ func (t *tx) AddItem(v logbook.Item) (string, bool) {
 	if t.err != nil {
 		return "", false
 	}
-	t.beside.PutItem(logbook.Item{ID: id, Source: v.Source, Results: v.Results})
+	t.putItemResults(id, v.Results)
+	t.putItemOutcomes(id, v.Done, v.IncidentDone)
 	return id, false
 }
 
 func (t *tx) PutItem(v logbook.Item) {
-	var was string
-	if !t.one([]any{&was}, `SELECT state FROM core.item WHERE item_id = $1`, v.ID) {
+	var wasState, wasSource string
+	if !t.one([]any{&wasState, &wasSource}, `SELECT state, coalesce(source, '') FROM core.item WHERE item_id = $1`, v.ID) {
 		return
 	}
 	paused := string(lifecycle.NeedsSubtool)
 	switch {
-	case string(v.State) == paused && was != paused:
+	case string(v.State) == paused && wasState != paused:
 		t.exec(`INSERT INTO core.pause (item_id, worker, pattern, paused_from, paused_at) VALUES ($1, $2, $3, $4, $5)`,
 			v.ID, v.PausedBy, pausePattern, string(v.PausedFrom), t.now)
-	case string(v.State) != paused && was == paused:
+	case string(v.State) != paused && wasState == paused:
 		t.exec(`UPDATE core.pause SET replayed_at = $2 WHERE item_id = $1 AND replayed_at IS NULL`, v.ID, t.now)
 	}
-	if string(v.State) != was {
-		t.exec(`UPDATE core.item SET state = $2 WHERE item_id = $1`, v.ID, string(v.State))
+	if string(v.State) != wasState || v.Source != wasSource {
+		t.exec(`UPDATE core.item SET state = $2, source = $3 WHERE item_id = $1`,
+			v.ID, string(v.State), optionalString(v.Source))
 	}
-	t.beside.PutItem(logbook.Item{ID: v.ID, Source: v.Source, Results: v.Results, Done: v.Done, IncidentDone: v.IncidentDone})
+	t.putItemResults(v.ID, v.Results)
+	t.putItemOutcomes(v.ID, v.Done, v.IncidentDone)
 }
 
 func (t *tx) Paused(worker string) []logbook.Item {
@@ -370,34 +375,45 @@ func (t *tx) Proposal(id string) (logbook.Proposal, bool) {
 	if !ok {
 		return logbook.Proposal{}, false
 	}
-	var element, repository, class, payload, status string
+	var element, repository, class, payload, reason, filePath, status string
 	var submitted time.Time
-	if !t.one([]any{&element, &repository, &class, &payload, &status, &submitted}, `
-		SELECT element_id, owner_repo, edit_class, payload, status, submitted_at
+	if !t.one([]any{&element, &repository, &class, &payload, &reason, &filePath, &status, &submitted}, `
+		SELECT element_id, owner_repo, edit_class, payload, coalesce(reason, ''), coalesce(file_path, ''), status, submitted_at
 		FROM core.edit_proposal WHERE proposal_id = $1`, n) {
 		return logbook.Proposal{}, false
 	}
-	p, _ := t.beside.Proposal(id)
-	p.ID, p.Target, p.Repository, p.EditKind, p.Change = id, element, repository, class, payload
-	p.Status, p.Received = lifecycle.State(status), submitted.UTC()
+	p := logbook.Proposal{
+		ID:         id,
+		Target:     element,
+		Repository: repository,
+		File:       filePath,
+		EditKind:   class,
+		Change:     payload,
+		Reason:     reason,
+		Status:     lifecycle.State(status),
+		Received:   submitted.UTC(),
+		Results:    t.proposalResults(n),
+		Done:       t.proposalOutcome(id, n),
+	}
 	return p, true
 }
 
 func (t *tx) AddProposal(v logbook.Proposal) string {
 	var n int64
 	if !t.one([]any{&n}, `
-		INSERT INTO core.edit_proposal (element_id, owner_repo, edit_class, payload, status, submitted_at)
-		VALUES ($1, $2, $3, $4, $5, $6)
-		RETURNING proposal_id`, v.Target, v.Repository, v.EditKind, v.Change, string(v.Status), v.Received) {
+		INSERT INTO core.edit_proposal (element_id, owner_repo, edit_class, payload, reason, file_path, status, submitted_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		RETURNING proposal_id`,
+		v.Target, v.Repository, v.EditKind, v.Change, optionalString(v.Reason), optionalString(v.File), string(v.Status), v.Received) {
 		return ""
 	}
 	if n < 1 || n > lifecycle.MaxID {
 		t.fail(contract.Unexpected)
 		return ""
 	}
-	id := lifecycle.ProposalID(uint64(n))
-	t.beside.PutProposal(logbook.Proposal{ID: id, File: v.File, Reason: v.Reason, Results: v.Results})
-	return id
+	t.putProposalResults(n, v.Results)
+	t.putProposalOutcome(n, v.Done)
+	return lifecycle.ProposalID(uint64(n))
 }
 
 func (t *tx) PutProposal(v logbook.Proposal) {
@@ -411,7 +427,8 @@ func (t *tx) PutProposal(v logbook.Proposal) {
 		SET status = $2,
 		    decided_at = CASE WHEN $2 = 'pending_approval' THEN NULL ELSE coalesce(decided_at, $3) END
 		WHERE proposal_id = $1 AND status IS DISTINCT FROM $2`, n, string(v.Status), t.now)
-	t.beside.PutProposal(logbook.Proposal{ID: v.ID, File: v.File, Reason: v.Reason, Results: v.Results, Done: v.Done})
+	t.putProposalResults(n, v.Results)
+	t.putProposalOutcome(n, v.Done)
 }
 
 func (t *tx) Building(repository string) []logbook.Proposal {
@@ -428,6 +445,199 @@ func (t *tx) Building(repository string) []logbook.Proposal {
 		}
 	}
 	return out
+}
+
+// ---------------------------------------------------------------------
+// Worker results and lease outcomes
+// ---------------------------------------------------------------------
+
+func (t *tx) itemResults(itemID string) map[string]json.RawMessage {
+	if t.err != nil {
+		return nil
+	}
+	rows, err := t.pg.Query(t.ctx, `SELECT worker, payload::text FROM core.result WHERE item_id = $1`, itemID)
+	if err != nil {
+		t.fail(err)
+		return nil
+	}
+	var out map[string]json.RawMessage
+	var worker, payload string
+	_, err = pgx.ForEachRow(rows, []any{&worker, &payload}, func() error {
+		if out == nil {
+			out = map[string]json.RawMessage{}
+		}
+		out[worker] = compactJSON(payload)
+		return nil
+	})
+	t.fail(err)
+	return out
+}
+
+func (t *tx) proposalResults(proposalID int64) map[string]json.RawMessage {
+	if t.err != nil {
+		return nil
+	}
+	rows, err := t.pg.Query(t.ctx, `SELECT worker, payload::text FROM core.result WHERE proposal_id = $1`, proposalID)
+	if err != nil {
+		t.fail(err)
+		return nil
+	}
+	var out map[string]json.RawMessage
+	var worker, payload string
+	_, err = pgx.ForEachRow(rows, []any{&worker, &payload}, func() error {
+		if out == nil {
+			out = map[string]json.RawMessage{}
+		}
+		out[worker] = compactJSON(payload)
+		return nil
+	})
+	t.fail(err)
+	return out
+}
+
+func sortedWorkers(results map[string]json.RawMessage) []string {
+	workers := make([]string, 0, len(results))
+	for w := range results {
+		workers = append(workers, w)
+	}
+	sort.Strings(workers)
+	return workers
+}
+
+func (t *tx) putItemResults(itemID string, results map[string]json.RawMessage) {
+	for _, worker := range sortedWorkers(results) {
+		t.exec(`
+			INSERT INTO core.result (item_id, worker, payload, recorded_at)
+			VALUES ($1, $2, $3::jsonb, $4)
+			ON CONFLICT (item_id, worker) WHERE item_id IS NOT NULL
+			DO UPDATE SET payload = EXCLUDED.payload, recorded_at = EXCLUDED.recorded_at
+			WHERE core.result.payload IS DISTINCT FROM EXCLUDED.payload`,
+			itemID, worker, string(results[worker]), t.now)
+	}
+}
+
+func (t *tx) putProposalResults(proposalID int64, results map[string]json.RawMessage) {
+	for _, worker := range sortedWorkers(results) {
+		t.exec(`
+			INSERT INTO core.result (proposal_id, worker, payload, recorded_at)
+			VALUES ($1, $2, $3::jsonb, $4)
+			ON CONFLICT (proposal_id, worker) WHERE proposal_id IS NOT NULL
+			DO UPDATE SET payload = EXCLUDED.payload, recorded_at = EXCLUDED.recorded_at
+			WHERE core.result.payload IS DISTINCT FROM EXCLUDED.payload`,
+			proposalID, worker, string(results[worker]), t.now)
+	}
+}
+
+func (t *tx) itemOutcomes(itemID string) (done, incident logbook.Finished) {
+	if t.err != nil {
+		return done, incident
+	}
+	rows, err := t.pg.Query(t.ctx, `
+		SELECT is_incident, lease, worker, call_name, coalesce(call_arg, ''),
+		       ack_state, coalesce(ack_next, ''), ack_held
+		FROM core.lease_outcome WHERE item_id = $1`, itemID)
+	if err != nil {
+		t.fail(err)
+		return done, incident
+	}
+	var isIncident, ackHeld bool
+	var lease, worker, callName, callArg, ackState, ackNext string
+	_, err = pgx.ForEachRow(rows, []any{&isIncident, &lease, &worker, &callName, &callArg, &ackState, &ackNext, &ackHeld}, func() error {
+		f := logbook.Finished{
+			Lease:  lease,
+			Worker: worker,
+			Call:   callName,
+			Arg:    callArg,
+			Ack: logbook.Ack{
+				ID:    itemID,
+				State: lifecycle.State(ackState),
+				Next:  ackNext,
+				Held:  ackHeld,
+			},
+		}
+		if isIncident {
+			incident = f
+		} else {
+			done = f
+		}
+		return nil
+	})
+	t.fail(err)
+	return done, incident
+}
+
+func (t *tx) putItemOutcomes(itemID string, done, incident logbook.Finished) {
+	t.putItemOutcome(itemID, false, done)
+	t.putItemOutcome(itemID, true, incident)
+}
+
+func (t *tx) putItemOutcome(itemID string, isIncident bool, d logbook.Finished) {
+	if d.Lease == "" {
+		t.exec(`DELETE FROM core.lease_outcome WHERE item_id = $1 AND is_incident = $2`, itemID, isIncident)
+		return
+	}
+	t.exec(`
+		INSERT INTO core.lease_outcome (item_id, is_incident, lease, worker, call_name, call_arg, ack_state, ack_next, ack_held, recorded_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		ON CONFLICT (item_id, is_incident) WHERE item_id IS NOT NULL
+		DO UPDATE SET lease = EXCLUDED.lease, worker = EXCLUDED.worker, call_name = EXCLUDED.call_name,
+		              call_arg = EXCLUDED.call_arg, ack_state = EXCLUDED.ack_state, ack_next = EXCLUDED.ack_next,
+		              ack_held = EXCLUDED.ack_held, recorded_at = EXCLUDED.recorded_at
+		WHERE (core.lease_outcome.lease, core.lease_outcome.worker, core.lease_outcome.call_name,
+		       core.lease_outcome.call_arg, core.lease_outcome.ack_state, core.lease_outcome.ack_next,
+		       core.lease_outcome.ack_held)
+		   IS DISTINCT FROM
+		      (EXCLUDED.lease, EXCLUDED.worker, EXCLUDED.call_name,
+		       EXCLUDED.call_arg, EXCLUDED.ack_state, EXCLUDED.ack_next,
+		       EXCLUDED.ack_held)`,
+		itemID, isIncident, d.Lease, d.Worker, d.Call, optionalString(d.Arg),
+		string(d.Ack.State), optionalString(d.Ack.Next), d.Ack.Held, t.now)
+}
+
+func (t *tx) proposalOutcome(proposalID string, n int64) logbook.Finished {
+	var lease, worker, callName, callArg, ackState, ackNext string
+	var ackHeld bool
+	if !t.one([]any{&lease, &worker, &callName, &callArg, &ackState, &ackNext, &ackHeld}, `
+		SELECT lease, worker, call_name, coalesce(call_arg, ''),
+		       ack_state, coalesce(ack_next, ''), ack_held
+		FROM core.lease_outcome WHERE proposal_id = $1`, n) {
+		return logbook.Finished{}
+	}
+	return logbook.Finished{
+		Lease:  lease,
+		Worker: worker,
+		Call:   callName,
+		Arg:    callArg,
+		Ack: logbook.Ack{
+			ID:    proposalID,
+			State: lifecycle.State(ackState),
+			Next:  ackNext,
+			Held:  ackHeld,
+		},
+	}
+}
+
+func (t *tx) putProposalOutcome(n int64, d logbook.Finished) {
+	if d.Lease == "" {
+		t.exec(`DELETE FROM core.lease_outcome WHERE proposal_id = $1`, n)
+		return
+	}
+	t.exec(`
+		INSERT INTO core.lease_outcome (proposal_id, is_incident, lease, worker, call_name, call_arg, ack_state, ack_next, ack_held, recorded_at)
+		VALUES ($1, false, $2, $3, $4, $5, $6, $7, $8, $9)
+		ON CONFLICT (proposal_id) WHERE proposal_id IS NOT NULL
+		DO UPDATE SET lease = EXCLUDED.lease, worker = EXCLUDED.worker, call_name = EXCLUDED.call_name,
+		              call_arg = EXCLUDED.call_arg, ack_state = EXCLUDED.ack_state, ack_next = EXCLUDED.ack_next,
+		              ack_held = EXCLUDED.ack_held, recorded_at = EXCLUDED.recorded_at
+		WHERE (core.lease_outcome.lease, core.lease_outcome.worker, core.lease_outcome.call_name,
+		       core.lease_outcome.call_arg, core.lease_outcome.ack_state, core.lease_outcome.ack_next,
+		       core.lease_outcome.ack_held)
+		   IS DISTINCT FROM
+		      (EXCLUDED.lease, EXCLUDED.worker, EXCLUDED.call_name,
+		       EXCLUDED.call_arg, EXCLUDED.ack_state, EXCLUDED.ack_next,
+		       EXCLUDED.ack_held)`,
+		n, d.Lease, d.Worker, d.Call, optionalString(d.Arg),
+		string(d.Ack.State), optionalString(d.Ack.Next), d.Ack.Held, t.now)
 }
 
 // ---------------------------------------------------------------------
@@ -459,14 +669,15 @@ type row struct {
 	proposal *int64
 	queued   time.Time
 	attempt  int
+	held     bool
 	token    *string
-	until    pgtype.Timestamptz
+	until    *time.Time
 }
 
-const rowColumns = `queue_id, worker, lane, item_id, proposal_id, queued_at, attempt, lease_token::text, leased_until`
+const rowColumns = `queue_id, worker, lane, item_id, proposal_id, queued_at, attempt, held, lease_token::text, leased_until`
 
 func (r *row) dest() []any {
-	return []any{&r.id, &r.worker, &r.lane, &r.item, &r.proposal, &r.queued, &r.attempt, &r.token, &r.until}
+	return []any{&r.id, &r.worker, &r.lane, &r.item, &r.proposal, &r.queued, &r.attempt, &r.held, &r.token, &r.until}
 }
 
 // leaseToken is the token Logbook holds for a live lease. It is made
@@ -507,13 +718,12 @@ func (t *tx) entry(r row) logbook.Entry {
 		e.Key = e.Subject
 	}
 	switch {
-	case r.token == nil:
-	case *r.token == heldToken:
+	case r.held:
 		e.Held = true
-	default:
+	case r.token != nil:
 		e.Lease = e.Key + "." + strconv.FormatUint(e.Arrival, 10) + "." + strconv.Itoa(e.Attempt)
-		if r.until.Valid && r.until.InfinityModifier == pgtype.Finite {
-			e.Expires = r.until.Time.UTC()
+		if r.until != nil {
+			e.Expires = r.until.UTC()
 		}
 	}
 	return e
@@ -535,7 +745,7 @@ func (t *tx) NextEntry(worker string, now time.Time) (logbook.Entry, bool) {
 	var r row
 	if !t.one(r.dest(), `
 		SELECT `+rowColumns+` FROM core.queue
-		WHERE worker = $1 AND queued_at <= $2 AND (lease_token IS NULL OR leased_until <= $2)
+		WHERE worker = $1 AND NOT held AND queued_at <= $2 AND (lease_token IS NULL OR leased_until <= $2)
 		ORDER BY lane_rank, queue_id
 		LIMIT 1`, worker, now.UTC()) {
 		return logbook.Entry{}, false
@@ -549,28 +759,20 @@ func (t *tx) PutEntry(e logbook.Entry) {
 		t.fail(contract.Unexpected)
 		return
 	}
-	// The lease as Logbook holds it.
 	var token *string
 	var until, beat *time.Time
-	forever := false
-	switch {
-	case e.Held:
-		held := heldToken
-		token, forever = &held, true
-	case e.Lease != "":
+	if !e.Held && e.Lease != "" {
 		made := leaseToken(e.Arrival, e.Attempt)
 		expires := e.Expires.UTC()
 		token, until, beat = &made, &expires, &t.now
 	}
 	if e.Arrival != 0 {
-		// The step keeps its place. Only its lease and its count of
-		// attempts can change.
+		// The step keeps its place. Only its attempt count, held flag and
+		// lease can change.
 		t.exec(`
 			UPDATE core.queue
-			SET attempt = $2, lease_token = $3::uuid,
-			    leased_until = CASE WHEN $4 THEN 'infinity'::timestamptz ELSE $5 END,
-			    heartbeat_at = $6
-			WHERE queue_id = $1`, int64(e.Arrival), e.Attempt, token, forever, until, beat)
+			SET attempt = $2, held = $3, lease_token = $4::uuid, leased_until = $5, heartbeat_at = $6
+			WHERE queue_id = $1`, int64(e.Arrival), e.Attempt, e.Held, token, until, beat)
 		return
 	}
 	// A new step takes the place of any step with the same key and joins
@@ -589,9 +791,9 @@ func (t *tx) PutEntry(e logbook.Entry) {
 		queued = e.NotBefore.UTC()
 	}
 	t.exec(`
-		INSERT INTO core.queue (worker, lane, item_id, proposal_id, queued_at, attempt, lease_token, leased_until, heartbeat_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7::uuid, CASE WHEN $8 THEN 'infinity'::timestamptz ELSE $9 END, $10)`,
-		e.Worker, string(e.Lane), item, proposal, queued, e.Attempt, token, forever, until, beat)
+		INSERT INTO core.queue (worker, lane, item_id, proposal_id, queued_at, attempt, held, lease_token, leased_until, heartbeat_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8::uuid, $9, $10)`,
+		e.Worker, string(e.Lane), item, proposal, queued, e.Attempt, e.Held, token, until, beat)
 }
 
 func (t *tx) DeleteEntry(key string) {
@@ -607,7 +809,7 @@ func (t *tx) Depths(now time.Time) logbook.Depths {
 	}
 	rows, err := t.pg.Query(t.ctx, `
 		SELECT lane, count(*) FROM core.queue
-		WHERE queued_at <= $1 AND (lease_token IS NULL OR leased_until <= $1)
+		WHERE NOT held AND queued_at <= $1 AND (lease_token IS NULL OR leased_until <= $1)
 		GROUP BY lane`, now.UTC())
 	if err != nil {
 		t.fail(err)
@@ -669,18 +871,11 @@ func (t *tx) Append(r logbook.Record) uint64 {
 	if from == to {
 		from, to = current, current
 	}
-	var fromState, code *string
-	if from != "" {
-		fromState = &from
-	}
-	if r.Code != "" {
-		code = &r.Code
-	}
 	var seq int64
 	t.one([]any{&seq}, `
 		INSERT INTO core.ledger (item_id, proposal_id, actor, from_state, to_state, error_code, note, recorded_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-		RETURNING entry_id`, item, proposal, r.Actor, fromState, to, code, note, r.At.UTC())
+		RETURNING entry_id`, item, proposal, r.Actor, optionalString(from), to, optionalString(r.Code), note, r.At.UTC())
 	return uint64(seq)
 }
 
@@ -720,45 +915,6 @@ func (t *tx) Evaluation(itemID string, result json.RawMessage) {
 		itemID, e.Profile, string(e.Gates), string(e.Factors), e.Score, e.Recommendation, e.SplitFlag, t.now)
 }
 
-func (t *tx) storedEvaluation(itemID string) (json.RawMessage, bool) {
-	var profile, gates, factors string
-	var score *int
-	var recommendation *string
-	var splitFlag bool
-	if !t.one([]any{&profile, &gates, &factors, &score, &recommendation, &splitFlag}, `
-		SELECT profile, gates::text, factors::text, score, recommendation, split_flag
-		FROM core.evaluation
-		WHERE item_id = $1
-		ORDER BY evaluation_id DESC
-		LIMIT 1`, itemID) {
-		return nil, false
-	}
-	var fac json.RawMessage
-	if factors != "{}" {
-		fac = json.RawMessage(factors)
-	}
-	raw, err := json.Marshal(struct {
-		Profile        string          `json:"profile"`
-		Gates          json.RawMessage `json:"gates"`
-		Factors        json.RawMessage `json:"factors,omitempty"`
-		Score          *int            `json:"score,omitempty"`
-		Recommendation *string         `json:"recommendation,omitempty"`
-		SplitFlag      bool            `json:"split_flag"`
-	}{
-		Profile:        profile,
-		Gates:          json.RawMessage(gates),
-		Factors:        fac,
-		Score:          score,
-		Recommendation: recommendation,
-		SplitFlag:      splitFlag,
-	})
-	if err != nil {
-		t.fail(contract.Unexpected)
-		return nil, false
-	}
-	return raw, true
-}
-
 // Decision adds the owner's decision to the decision trail of the item's
 // latest evaluation. An item with no evaluation on record has no trail
 // to add to. Logbook refuses a decision that goes against the
@@ -769,44 +925,94 @@ func (t *tx) Decision(itemID, outcome, reason string) {
 		SELECT evaluation_id FROM core.evaluation WHERE item_id = $1 ORDER BY evaluation_id DESC LIMIT 1`, itemID) {
 		return
 	}
-	var why *string
-	if reason != "" {
-		why = &reason
-	}
 	t.exec(`INSERT INTO core.decision (evaluation_id, outcome, reason, decided_at) VALUES ($1, $2, $3, $4)`,
-		evaluation, outcome, why, t.now)
+		evaluation, outcome, optionalString(reason), t.now)
 }
 
-func (t *tx) storedDecision(itemID string) (json.RawMessage, bool) {
-	var outcome, reason string
-	if !t.one([]any{&outcome, &reason}, `
-		SELECT d.outcome, coalesce(d.reason, '')
-		FROM core.decision d
-		JOIN core.evaluation e ON e.evaluation_id = d.evaluation_id
-		WHERE e.item_id = $1
-		ORDER BY d.decision_id DESC
-		LIMIT 1`, itemID) {
-		return nil, false
+// ---------------------------------------------------------------------
+// Component health and daily submission counts
+// ---------------------------------------------------------------------
+
+func (t *tx) Component(slug string) (logbook.Component, bool) {
+	var state, code, digest string
+	var reported time.Time
+	if !t.one([]any{&state, &code, &digest, &reported}, `
+		SELECT state, coalesce(error_code, ''), coalesce(digest, ''), reported_at
+		FROM core.component_health WHERE component = $1`, slug) {
+		return logbook.Component{}, false
 	}
-	raw, err := json.Marshal(struct {
-		Outcome string `json:"outcome"`
-		Reason  string `json:"reason,omitempty"`
-	}{
-		Outcome: outcome,
-		Reason:  reason,
-	})
+	return logbook.Component{
+		Slug:   slug,
+		State:  state,
+		Code:   code,
+		Digest: digest,
+		At:     reported.UTC(),
+	}, true
+}
+
+func (t *tx) PutComponent(c logbook.Component) {
+	at := t.now
+	if !c.At.IsZero() {
+		at = c.At.UTC()
+	}
+	t.exec(`
+		INSERT INTO core.component_health (component, state, error_code, digest, reported_at)
+		VALUES ($1, $2, $3, $4, $5)
+		ON CONFLICT (component) DO UPDATE
+		SET state = EXCLUDED.state, error_code = EXCLUDED.error_code,
+		    digest = EXCLUDED.digest, reported_at = EXCLUDED.reported_at`,
+		c.Slug, c.State, optionalString(c.Code), optionalString(c.Digest), at)
+}
+
+func (t *tx) Components() []logbook.Component {
+	if t.err != nil {
+		return nil
+	}
+	rows, err := t.pg.Query(t.ctx, `
+		SELECT component, state, coalesce(error_code, ''), coalesce(digest, ''), reported_at
+		FROM core.component_health ORDER BY component`)
 	if err != nil {
-		t.fail(contract.Unexpected)
-		return nil, false
+		t.fail(err)
+		return nil
 	}
-	return raw, true
+	var out []logbook.Component
+	var slug, state, code, digest string
+	var reported time.Time
+	_, err = pgx.ForEachRow(rows, []any{&slug, &state, &code, &digest, &reported}, func() error {
+		out = append(out, logbook.Component{
+			Slug:   slug,
+			State:  state,
+			Code:   code,
+			Digest: digest,
+			At:     reported.UTC(),
+		})
+		return nil
+	})
+	t.fail(err)
+	return out
 }
 
-// ---------------------------------------------------------------------
-// Kept beside Logbook, which has no column for these.
-// ---------------------------------------------------------------------
-
-func (t *tx) Component(slug string) (logbook.Component, bool) { return t.beside.Component(slug) }
-func (t *tx) PutComponent(c logbook.Component)                { t.beside.PutComponent(c) }
-func (t *tx) Components() []logbook.Component                 { return t.beside.Components() }
-func (t *tx) Bump(day, key string) (int, bool)                { return t.beside.Bump(day, key) }
+func (t *tx) Bump(day, key string) (int, bool) {
+	t.exec(`DELETE FROM core.submission_count WHERE submission_day < $1::date`, day)
+	var count int
+	if t.one([]any{&count}, `
+		UPDATE core.submission_count
+		SET submissions = submissions + 1
+		WHERE submission_day = $1::date AND visitor_key = $2
+		RETURNING submissions`, day, key) {
+		return count, true
+	}
+	var distinct int
+	if !t.one([]any{&distinct}, `SELECT count(*) FROM core.submission_count WHERE submission_day = $1::date`, day) || distinct >= keysPerDay {
+		return 0, false
+	}
+	if !t.one([]any{&count}, `
+		INSERT INTO core.submission_count (submission_day, visitor_key, submissions)
+		VALUES ($1::date, $2, 1)
+		ON CONFLICT (submission_day, visitor_key)
+		DO UPDATE SET submissions = core.submission_count.submissions + 1
+		RETURNING submissions`, day, key) {
+		return 0, false
+	}
+	return count, true
+}

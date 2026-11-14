@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ClearedStack/muster/internal/contract"
+	"github.com/ClearedStack/muster/internal/health"
 	"github.com/ClearedStack/muster/internal/intake"
 	"github.com/ClearedStack/muster/internal/lifecycle"
 	"github.com/ClearedStack/muster/internal/logbook"
@@ -212,6 +213,7 @@ func TestFail(t *testing.T) {
 		t.Errorf("the incident: %+v", inc)
 	}
 	f.want("the item", f.ask(`SELECT state FROM core.item WHERE item_id = 'PA-0001'`), "recorded")
+	f.want("the stopped queue row", f.ask(`SELECT worker, held, lease_token IS NULL, leased_until IS NULL FROM core.queue WHERE item_id = 'PA-0001' AND worker = 'sextant'`), "sextant|true|true|true")
 	f.want("the ledger", f.ask(history, "PA-0001"),
 		"trawl||recorded||seed", "sextant|recorded|recorded|E_TIMEOUT|fail", "sextant|recorded|recorded|E_PARSE|fail")
 
@@ -220,7 +222,7 @@ func TestFail(t *testing.T) {
 	if rel.Next != "sextant" || rel.State != lifecycle.Recorded {
 		t.Errorf("the release: %+v", rel)
 	}
-	f.want("the queue row after release", f.ask(`SELECT worker, lane, attempt, lease_token IS NULL FROM core.queue WHERE item_id = 'PA-0001' AND worker = 'sextant'`), "sextant|urgent|2|true")
+	f.want("the queue row after release", f.ask(`SELECT worker, lane, attempt, held, lease_token IS NULL FROM core.queue WHERE item_id = 'PA-0001' AND worker = 'sextant'`), "sextant|urgent|2|false|true")
 }
 
 func TestNeedsSubtoolAndReplay(t *testing.T) {
@@ -459,14 +461,201 @@ func TestEvaluationAndDecisionSurviveRestart(t *testing.T) {
 		t.Errorf("waybill missing results.assay after second restart: %+v", w.Results)
 	}
 	var gotDecision struct {
-		Outcome string `json:"outcome"`
-		Reason  string `json:"reason"`
+		Reason string `json:"reason"`
 	}
 	if err := json.Unmarshal(w.Results["countersign"], &gotDecision); err != nil {
 		t.Fatalf("results.countersign after second restart (%q): %v", w.Results["countersign"], err)
 	}
-	if gotDecision.Outcome != "build" || gotDecision.Reason != "Approved from the made-up rule." {
-		t.Errorf("reconstructed decision: %+v", gotDecision)
+	if gotDecision.Reason != "Approved from the made-up rule." {
+		t.Errorf("preserved countersign result: %+v", gotDecision)
+	}
+	f.want("the decision row", f.ask(`SELECT outcome, reason FROM core.decision`), "build|Approved from the made-up rule.")
+}
+
+// With migration 0010 applied, nothing lives in process memory beside
+// Logbook: item sources, non-evaluation worker results, proposal reasons
+// and files, repeated-call acknowledgements, component health and image
+// digests, and daily visitor submission counts all survive restarts.
+func TestStatelessAcrossRestart(t *testing.T) {
+	f := setup(t)
+	owners, err := intake.ParseOwnership([]byte(`{
+		"elements": {
+			"catalog.sample-calculator.description": {
+				"repository": "clearedstack.com",
+				"file": "src/data/sample-catalog.json",
+				"kind": "DATA"
+			}
+		}
+	}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	secret := []byte("made-up-salt-secret-for-tests-only-0123456789abcdef")
+	newServices := func(store logbook.Store) (*queue.Service, *intake.Service, *health.Service) {
+		return &queue.Service{Store: store, Clock: f.clock.Now, LeaseFor: time.Minute},
+			&intake.Service{Store: store, Clock: f.clock.Now, Owners: owners, Secret: secret, Difficulty: 0, DailyCap: 2},
+			&health.Service{Store: store, Clock: f.clock.Now}
+	}
+
+	_, take1, h1 := newServices(f.book.Store)
+
+	// Record three items and an initial pair of component digests before the first restart.
+	r1 := must(take1.Record(ctx, "trawl", intake.Candidate{
+		Source: "sam-gov", Title: "Notice one", Address: "https://example.org/made-up/stateless-1",
+	}))(t)
+	r2 := must(take1.Record(ctx, "trawl", intake.Candidate{
+		Source: "github-issues", Title: "Issue two", Address: "https://example.org/made-up/stateless-2",
+	}))(t)
+	r3 := must(take1.Record(ctx, "trawl", intake.Candidate{
+		Source: "sam-gov", Title: "Notice three", Address: "https://example.org/made-up/stateless-3",
+	}))(t)
+	if r1.ID != "PA-0001" || r2.ID != "PA-0002" || r3.ID != "PA-0003" {
+		t.Fatalf("recorded IDs: %+v %+v %+v", r1, r2, r3)
+	}
+	must(h1.Receive(ctx, []health.Report{
+		{Component: "sextant", State: "healthy", Digest: "sha256:" + strings.Repeat("1", 64)},
+		{Component: "conn", State: "healthy", Digest: "sha256:" + strings.Repeat("a", 64)},
+	}))(t)
+
+	// Visitor 203.0.113.9 uses both of its daily submissions (one proposal, one site-form candidate).
+	sub1 := intake.Submission{
+		Target: "catalog.sample-calculator.description",
+		Change: "Clarify which made-up rule applies.",
+		Reason: "The current wording leaves it open.",
+		Pow:    "2026-01-05.0",
+		Source: "203.0.113.9",
+	}
+	recProp := must(take1.Receive(ctx, sub1, len(sub1.Change)))(t)
+	if recProp == nil || recProp.ID != "EP-0001" {
+		t.Fatalf("proposal receipt: %+v", recProp)
+	}
+	must(take1.Record(ctx, "conn", intake.Candidate{
+		Source: "site-form", Title: "Reader tool idea", Address: "https://example.org/made-up/reader-1",
+		Pow: "2026-01-05.1", Visitor: "203.0.113.9",
+	}))(t)
+
+	// Restart #1: verify item sources, proposal reason/file, and daily visitor cap survived.
+	q2, take2, _ := newServices(f.book.Reopen(t, f.clock.Now))
+
+	if _, err := take2.Receive(ctx, intake.Submission{
+		Target: "catalog.sample-calculator.description",
+		Change: "A third submission from the same visitor.",
+		Reason: "Testing rate limit across restart.",
+		Pow:    "2026-01-05.2",
+		Source: "203.0.113.9",
+	}, 40); err != contract.RateLimited {
+		t.Fatalf("third submission on same UTC day after restart: got %v, want 429 rate_limited", err)
+	}
+
+	tr1 := must(q2.Lease(ctx, "trawl"))(t)
+	if tr1 == nil || tr1.Found == nil || tr1.Found.Source != "sam-gov" {
+		t.Fatalf("trawl lease 1 after restart: %+v", tr1)
+	}
+	must(q2.Complete(ctx, "trawl", tr1.Lease, lifecycle.Recorded, json.RawMessage(`{"fetched":"notice-1"}`)))(t)
+
+	tr2 := must(q2.Lease(ctx, "trawl"))(t)
+	if tr2 == nil || tr2.Found == nil || tr2.Found.Source != "github-issues" {
+		t.Fatalf("trawl lease 2 after restart: %+v", tr2)
+	}
+	must(q2.Complete(ctx, "trawl", tr2.Lease, lifecycle.Recorded, json.RawMessage(`{"fetched":"issue-2"}`)))(t)
+
+	tr3 := must(q2.Lease(ctx, "trawl"))(t)
+	must(q2.Complete(ctx, "trawl", tr3.Lease, lifecycle.Recorded, json.RawMessage(`{"fetched":"notice-3"}`)))(t)
+
+	sx1 := must(q2.Lease(ctx, "sextant"))(t)
+	ackSx1 := must(q2.Complete(ctx, "sextant", sx1.Lease, lifecycle.Observed, json.RawMessage(`{"job":"one-job"}`)))(t)
+
+	sx2 := must(q2.Lease(ctx, "sextant"))(t)
+	ackSx2 := must(q2.Fail(ctx, "sextant", sx2.Lease, contract.Parse))(t)
+
+	sx3 := must(q2.Lease(ctx, "sextant"))(t)
+	ackSx3 := must(q2.NeedsSubtool(ctx, "sextant", sx3.Lease))(t)
+
+	inc := must(q2.Lease(ctx, "bellbuoy"))(t)
+	ackInc := must(q2.Complete(ctx, "bellbuoy", inc.Lease, inc.State, nil))(t)
+
+	csProp := must(q2.Lease(ctx, "countersign"))(t)
+	if csProp == nil || csProp.Proposal == nil ||
+		csProp.Proposal.File != "src/data/sample-catalog.json" ||
+		csProp.Proposal.Reason != "The current wording leaves it open." {
+		t.Fatalf("proposal lease after restart: %+v", csProp)
+	}
+	must(q2.Complete(ctx, "countersign", csProp.Lease, lifecycle.Approved, json.RawMessage(`{"note":"looks right"}`)))(t)
+
+	// Restart #2: verify non-evaluation results, proposal results, repeated-call outcomes, and digest actions.
+	q3, _, _ := newServices(f.book.Reopen(t, f.clock.Now))
+
+	if got := must(q3.Complete(ctx, "sextant", sx1.Lease, lifecycle.Observed, json.RawMessage(`{"job":"one-job"}`)))(t); *got != *ackSx1 {
+		t.Errorf("repeated complete after restart: got %+v, want %+v", got, ackSx1)
+	}
+	if got := must(q3.Fail(ctx, "sextant", sx2.Lease, contract.Parse))(t); *got != *ackSx2 {
+		t.Errorf("repeated fail after restart: got %+v, want %+v", got, ackSx2)
+	}
+	if got := must(q3.NeedsSubtool(ctx, "sextant", sx3.Lease))(t); *got != *ackSx3 {
+		t.Errorf("repeated needs_subtool after restart: got %+v, want %+v", got, ackSx3)
+	}
+	if got := must(q3.Complete(ctx, "bellbuoy", inc.Lease, inc.State, nil))(t); *got != *ackInc {
+		t.Errorf("repeated incident complete after restart: got %+v, want %+v", got, ackInc)
+	}
+
+	as := must(q3.Lease(ctx, "assay"))(t)
+	if as == nil || string(as.Results["trawl"]) != `{"fetched":"notice-1"}` || string(as.Results["sextant"]) != `{"job":"one-job"}` {
+		t.Fatalf("assay lease results after restart: %+v", as)
+	}
+
+	bbProp := must(q3.Lease(ctx, "bellbuoy"))(t)
+	if bbProp == nil || bbProp.Kind != lifecycle.KindProposal {
+		t.Fatalf("expected urgent proposal EP-0001 first for bellbuoy, got %+v", bbProp)
+	}
+	if string(bbProp.Results["countersign"]) != `{"note":"looks right"}` ||
+		bbProp.Proposal == nil || bbProp.Proposal.File != "src/data/sample-catalog.json" ||
+		bbProp.Proposal.Reason != "The current wording leaves it open." {
+		t.Fatalf("bellbuoy proposal lease after restart: %+v (proposal=%+v)", bbProp, bbProp.Proposal)
+	}
+	ackProp := must(q3.Complete(ctx, "bellbuoy", bbProp.Lease, lifecycle.Building, json.RawMessage(`{"pr":42}`)))(t)
+
+	// Restart #3: verify proposal repeated-call outcome, digest-triggered replay + live, and next-day count reset.
+	q4, take4, h4 := newServices(f.book.Reopen(t, f.clock.Now))
+
+	if got := must(q4.Complete(ctx, "bellbuoy", bbProp.Lease, lifecycle.Building, json.RawMessage(`{"pr":42}`)))(t); *got != *ackProp {
+		t.Errorf("repeated proposal complete after restart: got %+v, want %+v", got, ackProp)
+	}
+
+	sum := must(h4.Receive(ctx, []health.Report{
+		{Component: "sextant", State: "healthy", Digest: "sha256:" + strings.Repeat("2", 64)},
+		{Component: "conn", State: "healthy", Digest: "sha256:" + strings.Repeat("b", 64)},
+	}))(t)
+	if sum.Replayed != 1 || sum.Live != 1 {
+		t.Fatalf("digest change after restart: got %+v, want Replayed=1 Live=1", sum)
+	}
+	f.want("proposal status after conn redeploy", f.ask(`SELECT status FROM core.edit_proposal WHERE proposal_id = 1`), "live")
+	replayed := must(q4.Lease(ctx, "sextant"))(t)
+	if replayed == nil || replayed.ID != "PA-0003" || replayed.Lane != lifecycle.Urgent {
+		t.Fatalf("replayed item after restart: %+v", replayed)
+	}
+
+	// Next UTC day admits visitor 203.0.113.9 again and purges yesterday's row.
+	f.clock.t = f.clock.t.Add(24 * time.Hour)
+	recNextDay := must(take4.Receive(ctx, intake.Submission{
+		Target: "catalog.sample-calculator.description",
+		Change: "Next-day edit.",
+		Reason: "Fresh UTC day.",
+		Pow:    "2026-01-06.0",
+		Source: "203.0.113.9",
+	}, 20))(t)
+	if recNextDay == nil || recNextDay.ID != "EP-0002" {
+		t.Fatalf("next-day proposal: %+v", recNextDay)
+	}
+	f.want("only today's submission count remains", f.ask(`SELECT submission_day::text, submissions FROM core.submission_count`), "2026-01-06|1")
+
+	rows := f.ask(`SELECT check_name, failures FROM core.integrity_check()`)
+	if len(rows) != 19 {
+		t.Errorf("expected 19 integrity checks in migration 0010, got %d", len(rows))
+	}
+	for _, row := range rows {
+		if !strings.HasSuffix(row, "|0") {
+			t.Errorf("integrity check: %s", row)
+		}
 	}
 }
 

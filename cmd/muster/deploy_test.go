@@ -99,6 +99,7 @@ func TestDeployManifests(t *testing.T) {
 		"type: ClusterIP",
 		"port: 80",
 		"port: 8080",
+		"priorityClassName: clearedstack-high",
 		"serviceAccountName: muster",
 		"automountServiceAccountToken: true",
 		"key: kubernetes.io/arch",

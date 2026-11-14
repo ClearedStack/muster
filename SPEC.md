@@ -94,26 +94,25 @@ Choices the contract left to the build, each easy to change and each pinned by a
 - **A live item with no check recorded,** as in a seed file, is due for one at once.
 - **The 4 KB limit on an edit proposal** is checked with the other shape checks, after the rate limit, now that every body is read up to 64 KiB.
 
-## What Logbook has no place for yet
+## How Logbook keeps Muster's records
 
-Muster's storage line above says it is stateless and that all durable state lives in Logbook. With Logbook's schema as it stands (migrations 0001 to 0009), that is true of items, the queue, the ledger, pauses, proposals, evaluations and decisions. It is not yet true of these, which Muster keeps in its own memory and loses when it stops:
+With Logbook's migrations 0001 to 0010 applied, all durable state Muster needs lives in PostgreSQL under `core.*`, and Muster holds nothing beside Logbook in process memory:
 
-| What | Why Muster needs it | What is lost on a restart |
-| --- | --- | --- |
-| Each worker's result, other than an evaluation or a decision | Later workers are given `results.<worker>` | A later worker is given no earlier results |
-| The source an item was found through | Trawl is given it as `found.source` | The source |
-| A proposal's reason, and the file its element lives in | Countersign and Bellbuoy are given both | Both |
-| The answer to the call that ended a subject's last lease | A repeated call gets the same answer | A repeated call is refused with `lease_not_held` |
-| Each component's latest health and image digest | The feed, replay, and proposals going live | The next digest is only recorded, not acted on |
-| The day's count of submissions per visitor | The daily limit | The count starts again |
+| What Muster keeps | Where Logbook stores it |
+| --- | --- |
+| Items, their state, title, address and intake source | `core.item` (`source` on candidates) |
+| Queue steps, leases, heartbeats and stopped steps | `core.queue` (`held = true` when stopped by `E_PARSE`; future `queued_at` for seven-day checks, excluded from `pub.queue_depth` until due) |
+| Append-only transition history | `core.ledger` |
+| Paused items waiting on a worker rule | `core.pause` |
+| Edit proposals, their element, owning repo, file, reason and status | `core.edit_proposal` (`reason`, `file_path`) |
+| Each worker's latest JSON object result on an item or proposal | `core.result` (alongside structured rows in `core.evaluation` and `core.decision`) |
+| The answer to the call that ended a subject's last lease | `core.lease_outcome` (items, incidents and proposals) |
+| Each component's latest health, error code and image digest | `core.component_health` (published without digests via `pub.component_health`) |
+| Each visitor key's daily submission count | `core.submission_count` |
 
-**Proposed change to Logbook:** tables for results, component health and the daily counts, a column for an item's source, and columns for a proposal's reason and file. Until then Muster cannot be called stateless.
+One small mismatch remains and needs no schema change:
 
-Three smaller mismatches, each handled without changing Logbook:
-
-- **A stopped step.** Logbook's queue has no column for "held". Muster gives a stopped step a lease that never ends, with a fixed token, so it stays on record and is not offered.
-- **A step that is not due.** Logbook's queue has no "not before" column. Muster sets `queued_at` in the future for a Tidegauge check and offers only steps whose `queued_at` has passed. Logbook's `pub.queue_depth` view counts such a step as waiting.
-- **The pattern of a pause.** Logbook requires one. The `needs_subtool` call carries none, so Muster writes "not given".
+- **The pattern of a pause.** `core.pause` requires `pattern`, while `POST /v1/needs_subtool` carries none, so Muster writes `"not given"`.
 
 ## Changes to this specification
 
@@ -133,6 +132,7 @@ Three smaller mismatches, each handled without changing Logbook:
 | Added the seven-day Tidegauge check and its three outcomes, Bellbuoy's incident step, the move of a proposal to `live` and the owner's release | These were open questions; each now has a rule |
 | Named pgx as the one dependency, and added a store that keeps Muster's records in Logbook's schema | Muster is the only writer of Logbook's working records, and the standard library has no PostgreSQL driver |
 | Let `complete` take a result for a proposal as it does for an item | One rule for every step a worker completes, and Bellbuoy needs what Countersign decided |
+| Stored results, intake sources, proposal reasons and file paths, stopped steps, lease outcomes, component health and daily visitor counts in Logbook migration 0010 | Removes the in-memory side store so Muster is stateless across restarts |
 
 ## Related pages
 
