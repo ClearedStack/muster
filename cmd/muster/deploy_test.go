@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -60,6 +61,9 @@ func TestDeployManifests(t *testing.T) {
 		}
 	}
 
+	appYAML := mustReadText(t, filepath.Join(root, "app.yaml"))
+	checkAppYAML(t, appYAML)
+
 	rbac := mustReadText(t, filepath.Join(root, "deploy/rbac.yaml"))
 	for _, want := range []string{
 		"kind: ServiceAccount",
@@ -99,6 +103,7 @@ func TestDeployManifests(t *testing.T) {
 		"type: ClusterIP",
 		"port: 80",
 		"port: 8080",
+		"targetPort: 8080",
 		"priorityClassName: clearedstack-high",
 		"serviceAccountName: muster",
 		"automountServiceAccountToken: true",
@@ -115,6 +120,8 @@ func TestDeployManifests(t *testing.T) {
 		"type: RuntimeDefault",
 		"cpu: 20m",
 		"memory: 48Mi",
+		"tcpSocket:\n              port: 8080",
+		"path: /healthz\n              port: 8080",
 		"name: logbook-credentials",
 		"key: muster-password",
 		"secretName: muster-credentials",
@@ -124,9 +131,26 @@ func TestDeployManifests(t *testing.T) {
 		}
 	}
 
-	// The default ownership map in the ConfigMap must pass Muster's parser.
-	if _, err := intake.ParseOwnership([]byte(`{"elements":{}}`)); err != nil {
+	// Extract and validate the actual ownership_map.json shipped in the ConfigMap.
+	ownershipJSON := extractConfigMapOwnership(t, workload)
+	owners, err := intake.ParseOwnership([]byte(ownershipJSON))
+	if err != nil {
 		t.Fatalf("ConfigMap ownership_map.json rejected by intake.ParseOwnership: %v", err)
+	}
+	for _, mustExist := range []string{
+		"command.hero.mission",
+		"app.muster.manifest",
+		"app.logbook.manifest",
+		"app.shipkeeper.manifest",
+		"worker.trawl.manifest",
+		"worker.bellbuoy.manifest",
+	} {
+		if _, ok := owners[mustExist]; !ok {
+			t.Errorf("ConfigMap ownership_map.json omits expected target %q", mustExist)
+		}
+	}
+	if got := owners["app.muster.manifest"]; got.Repository != "muster" || got.File != "app.yaml" {
+		t.Errorf("app.muster.manifest = %+v, want repository=muster file=app.yaml", got)
 	}
 
 	// Every MUSTER_* variable in deploy/muster.yaml must load cleanly through
@@ -149,6 +173,8 @@ func TestDeployManifests(t *testing.T) {
 	netpol := mustReadText(t, filepath.Join(root, "deploy/networkpolicy.yaml"))
 	for _, want := range []string{
 		"kind: NetworkPolicy",
+		"name: muster",
+		"name: muster-egress",
 		"namespace: clearedstack",
 		"- Ingress",
 		"- Egress",
@@ -169,19 +195,21 @@ func TestDeployManifests(t *testing.T) {
 			t.Errorf("deploy/networkpolicy.yaml opens %s", wideOpen)
 		}
 	}
-	// Ingress opens every component that may call Muster, and no component
-	// that does not.
-	ingressSection, _, ok := strings.Cut(netpol, "  egress:")
+	// Ingress policy (before "---") opens every component that may call Muster,
+	// and no component that does not.
+	ingressDoc, egressDoc, ok := strings.Cut(netpol, "\n---\n")
 	if !ok {
-		t.Fatal("deploy/networkpolicy.yaml has no egress section")
+		t.Fatal("deploy/networkpolicy.yaml must split NetworkPolicy/muster (Ingress) and NetworkPolicy/muster-egress (Egress)")
 	}
-	_, ingressSection, ok = strings.Cut(ingressSection, "  ingress:")
-	if !ok {
-		t.Fatal("deploy/networkpolicy.yaml has no ingress section")
+	if strings.Contains(ingressDoc, "\n    - Egress") {
+		t.Error("NetworkPolicy/muster must carry Ingress only so Shipkeeper Server-Side Apply does not conflict on policyTypes")
+	}
+	if !strings.Contains(egressDoc, "name: muster-egress") || !strings.Contains(egressDoc, "  egress:") {
+		t.Error("second document in deploy/networkpolicy.yaml must be muster-egress")
 	}
 	for _, comp := range registry.All() {
-		entry := "- " + comp.Slug
-		present := strings.Contains(ingressSection, entry)
+		entry := "app.kubernetes.io/name: " + comp.Slug
+		present := strings.Contains(ingressDoc, entry) && comp.Slug != "muster"
 		allowed := auth.MayCall(comp.Slug)
 		if allowed && !present {
 			t.Errorf("deploy/networkpolicy.yaml ingress omits caller %s", comp.Slug)
@@ -192,16 +220,108 @@ func TestDeployManifests(t *testing.T) {
 	}
 }
 
+func checkAppYAML(t *testing.T, text string) {
+	t.Helper()
+	if strings.Contains(text, "\r") {
+		t.Fatal("app.yaml must use LF line endings")
+	}
+	for _, want := range []string{
+		"name: muster",
+		"namespace: clearedstack",
+		"image: muster",
+		"replicas: 1",
+		"port: 8080",
+		"memory: 48Mi",
+	} {
+		if !strings.Contains(text, want+"\n") {
+			t.Errorf("app.yaml missing %q", want)
+		}
+	}
+	digestMatches := regexp.MustCompile(`(?m)^digest:\s*(sha256:[0-9a-f]{64})\s*$`).FindAllStringSubmatch(text, -1)
+	if len(digestMatches) != 1 {
+		t.Fatalf("app.yaml must carry exactly one top-level sha256 digest line, got %d", len(digestMatches))
+	}
+
+	var gotPeers []string
+	inAllow := false
+	for _, line := range strings.Split(text, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		if line == "allowFrom:" {
+			inAllow = true
+			continue
+		}
+		if inAllow {
+			if strings.HasPrefix(line, "  - ") {
+				gotPeers = append(gotPeers, strings.TrimSpace(strings.TrimPrefix(line, "  - ")))
+				continue
+			}
+			inAllow = false
+		}
+	}
+
+	var wantPeers []string
+	for _, comp := range registry.All() {
+		if auth.MayCall(comp.Slug) {
+			wantPeers = append(wantPeers, comp.Namespace+"/"+comp.Slug)
+		}
+	}
+	sort.Strings(wantPeers)
+	if !sort.StringsAreSorted(gotPeers) {
+		t.Errorf("app.yaml allowFrom is not sorted: %v", gotPeers)
+	}
+	if strings.Join(gotPeers, ",") != strings.Join(wantPeers, ",") {
+		t.Errorf("app.yaml allowFrom = %v, want %v", gotPeers, wantPeers)
+	}
+}
+
+func extractConfigMapOwnership(t *testing.T, manifest string) string {
+	t.Helper()
+	_, rest, ok := strings.Cut(manifest, "  ownership_map.json: |\n")
+	if !ok {
+		t.Fatal("deploy/muster.yaml has no ownership_map.json block")
+	}
+	block, _, ok := strings.Cut(rest, "\n---\n")
+	if !ok {
+		t.Fatal("ownership_map.json ConfigMap is not followed by document separator")
+	}
+	var lines []string
+	for _, line := range strings.Split(block, "\n") {
+		if line == "" {
+			continue
+		}
+		if !strings.HasPrefix(line, "    ") {
+			t.Fatalf("unexpected indentation in ownership_map.json block: %q", line)
+		}
+		lines = append(lines, strings.TrimPrefix(line, "    "))
+	}
+	return strings.Join(lines, "\n")
+}
+
 func TestBuildConfigAndNoEmDashes(t *testing.T) {
 	root, err := filepath.Abs("../..")
 	if err != nil {
 		t.Fatal(err)
 	}
 	koText := mustReadText(t, filepath.Join(root, ".ko.yaml"))
-	for _, want := range []string{"main: ./cmd/muster", "CGO_ENABLED=0"} {
+	for _, want := range []string{
+		"main: ./cmd/muster",
+		"CGO_ENABLED=0",
+		"- linux/arm64",
+	} {
 		if !strings.Contains(koText, want) {
 			t.Errorf(".ko.yaml missing %q", want)
 		}
+	}
+	baseLine := regexp.MustCompile(`(?m)^defaultBaseImage:\s*(\S+)\s*$`).FindStringSubmatch(koText)
+	if baseLine == nil {
+		t.Fatal(".ko.yaml missing defaultBaseImage")
+	}
+	wantBase := regexp.MustCompile(`^lazarette\.clearedstack\.svc\.cluster\.local:5000/static@sha256:[0-9a-f]{64}$`)
+	if !wantBase.MatchString(baseLine[1]) {
+		t.Errorf(".ko.yaml defaultBaseImage = %q, want sha256-pinned image in Lazarette", baseLine[1])
 	}
 
 	err = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {

@@ -1,11 +1,16 @@
-# How ko builds the Muster image, straight from source. There is no
-# Dockerfile.
+# How ko and Keelworks build the Muster image straight from source.
+# There is no Dockerfile.
 #
 #   ko build ./cmd/muster
 #
-# ko's default base image is a static, shell-less image whose user is
-# not root, which is what Muster needs: it is one static binary, it
-# writes nothing to disk and it asks for no privileges.
+# Inside the cluster, Keelworks builds for linux/arm64 against Lazarette
+# so nothing is pulled from outside at build or run time. Before Lazarette
+# holds a populated static base image, Keelworks treats the all-zero
+# bootstrap digest as a static non-root scratch layer (uid 65532).
+defaultBaseImage: lazarette.clearedstack.svc.cluster.local:5000/static@sha256:0000000000000000000000000000000000000000000000000000000000000000
+defaultPlatforms:
+  - linux/arm64
+
 builds:
   - id: muster
     main: ./cmd/muster

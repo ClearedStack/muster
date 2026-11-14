@@ -67,6 +67,23 @@ func TestStripLeavesNoTag(t *testing.T) {
 	build("", 4)
 }
 
+func TestStripScriptAndStyleByteOffsets(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"invalid UTF-8 inside style", "<style>\xff\xfe</style>kept", "kept"},
+		{"expanding UTF-8 rune U+023A inside style", "<style>\u023a\u023a\u023a</STYLE>kept", "kept"},
+		{"expanding UTF-8 rune U+0130 inside script", "<script>\u0130\u0130</ScRiPt>after", "after"},
+	}
+	for _, tc := range cases {
+		if got := Strip(tc.in); got != tc.want {
+			t.Errorf("%s: Strip(%q) = %q, want %q", tc.name, tc.in, got, tc.want)
+		}
+	}
+}
+
 func TestProofOfWorkSavedExamples(t *testing.T) {
 	var file struct {
 		Cases []struct {
@@ -125,15 +142,41 @@ func TestOwnershipRefusals(t *testing.T) {
 	if _, err := ParseOwnership([]byte(good)); err != nil {
 		t.Fatalf("a good map was refused: %v", err)
 	}
+	connEnvelope := `{"version":"v1","maxBytes":4096,"elements":{"command.hero.mission":{"ownerRepo":"clearedstack.com","filePath":"src/data/site.ts","editClass":"DATA"},"tool.slug.page":{"ownerRepo":"clearedstack.com","filePath":"src/app/tools/[slug]/page.tsx","editClass":"CONFIG"}}}`
+	gotConn, err := ParseOwnership([]byte(connEnvelope))
+	if err != nil {
+		t.Fatalf("Conn envelope refused: %v", err)
+	}
+	if gotConn["command.hero.mission"] != (Owner{Repository: "clearedstack.com", File: "src/data/site.ts", Kind: "DATA"}) {
+		t.Fatalf("Conn envelope decoded as %+v", gotConn["command.hero.mission"])
+	}
+	bellbuoyEnvelope := `{"repos":{"muster":{"mirror":true}},"workers":{"muster":"muster","conn":"clearedstack.com"},"paths":[{"prefix":"src/","repo":"clearedstack.com"}],"elements":{"app.muster.manifest":{"repository":"muster","file":"app.yaml","kind":"CONFIG"}}}`
+	gotBellbuoy, err := ParseOwnership([]byte(bellbuoyEnvelope))
+	if err != nil {
+		t.Fatalf("Bellbuoy envelope refused: %v", err)
+	}
+	if gotBellbuoy["app.muster.manifest"] != (Owner{Repository: "muster", File: "app.yaml", Kind: "CONFIG"}) {
+		t.Fatalf("Bellbuoy envelope decoded as %+v", gotBellbuoy["app.muster.manifest"])
+	}
 	bad := map[string]string{
 		"not JSON":                    `elements`,
 		"no elements":                 `{}`,
 		"an unknown top-level field":  `{"elements":{},"owner":"made-up"}`,
 		"an unknown field in a row":   `{"elements":{"a.b":{"repository":"sextant","file":"f","kind":"DATA","note":"x"}}}`,
+		"duplicate repository alias":  `{"elements":{"a.b":{"repository":"sextant","ownerRepo":"sextant","file":"f","kind":"DATA"}}}`,
+		"unknown envelope version":    `{"version":"v2","elements":{"a.b":{"repository":"sextant","file":"f","kind":"DATA"}}}`,
+		"maxBytes above 4096":         `{"maxBytes":4097,"elements":{"a.b":{"repository":"sextant","file":"f","kind":"DATA"}}}`,
+		"unregistered repo in repos":  `{"repos":{"made-up":{"mirror":true}},"elements":{"a.b":{"repository":"sextant","file":"f","kind":"DATA"}}}`,
+		"unregistered worker slug":    `{"workers":{"made-up":"sextant"},"elements":{"a.b":{"repository":"sextant","file":"f","kind":"DATA"}}}`,
 		"a repository not registered": `{"elements":{"a.b":{"repository":"made-up","file":"f","kind":"DATA"}}}`,
 		"a kind that does not exist":  `{"elements":{"a.b":{"repository":"sextant","file":"f","kind":"OTHER"}}}`,
 		"a kind in lower case":        `{"elements":{"a.b":{"repository":"sextant","file":"f","kind":"data"}}}`,
 		"no file":                     `{"elements":{"a.b":{"repository":"sextant","file":"","kind":"DATA"}}}`,
+		"an absolute file path":       `{"elements":{"a.b":{"repository":"sextant","file":"/etc/passwd","kind":"DATA"}}}`,
+		"a parent traversal path":     `{"elements":{"a.b":{"repository":"sextant","file":"tools/../secret.json","kind":"DATA"}}}`,
+		"a dot segment path":          `{"elements":{"a.b":{"repository":"sextant","file":"./rule.json","kind":"DATA"}}}`,
+		"a file path with spaces":     `{"elements":{"a.b":{"repository":"sextant","file":"tools/my rule.json","kind":"DATA"}}}`,
+		"a file path too long":        `{"elements":{"a.b":{"repository":"sextant","file":"` + strings.Repeat("a", MaxFileBytes+1) + `","kind":"DATA"}}}`,
 		"an empty target":             `{"elements":{"":{"repository":"sextant","file":"f","kind":"DATA"}}}`,
 		"a target with a line break":  `{"elements":{"a\nb":{"repository":"sextant","file":"f","kind":"DATA"}}}`,
 		"a target with a slash":       `{"elements":{"a/b":{"repository":"sextant","file":"f","kind":"DATA"}}}`,
