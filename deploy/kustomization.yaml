@@ -1,0 +1,13 @@
+# What a cluster applies to run Muster. Written for Argo CD, pointed at this
+# directory.
+#
+# The image is named "muster" and nothing more in muster.yaml. Whoever deploys
+# Muster says which registry and which digest that is, with an image override,
+# so no registry address is written in this repository.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - muster.yaml
+  - networkpolicy.yaml
+  - workers.yaml

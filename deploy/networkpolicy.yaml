@@ -1,0 +1,52 @@
+# The namespace denies everything by default (Logbook's deploy brings that
+# policy). This opens what Muster needs and no more.
+#
+# In:  the workers (every pod of the cs-workers namespace), Conn and
+#      Shipkeeper, on 8080.
+# Out: Logbook on 5432, and the cluster's name service to find it.
+#
+# Muster also calls the cluster's API, to ask whose token a caller presented.
+# A NetworkPolicy cannot name the API server; the rule for it depends on the
+# cluster and is added by whoever deploys Muster.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: muster
+  namespace: clearedstack
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: muster
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: cs-workers
+        - podSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values: ["conn", "shipkeeper"]
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: logbook
+      ports:
+        - protocol: TCP
+          port: 5432
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53

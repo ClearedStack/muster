@@ -1,0 +1,51 @@
+# cs-workers: the namespace the ten workers run in. Nothing in it may send or
+# receive anything unless a policy says so, and the one thing every worker may
+# do is call Muster.
+#
+# A worker holds no database credential and has no way to Logbook: Logbook
+# admits Muster only.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cs-workers
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  namespace: cs-workers
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: workers-to-muster
+  namespace: cs-workers
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: clearedstack
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: muster
+      ports:
+        - protocol: TCP
+          port: 8080
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
