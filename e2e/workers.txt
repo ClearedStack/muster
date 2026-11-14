@@ -1,0 +1,13 @@
+# One worker per line: <repo> <branch>. The binary is cmd/<repo>.
+# Lines starting with # and blank lines are ignored.
+# Logbook is listed too: only its migrations/ directory is used.
+# Trawl and Shakedown: head branch of the newest open pull request on 2026-11-14.
+trawl sync/github-main-1114
+sextant build/2-assay-facts
+assay build/6-designed-tier
+countersign build/4-approve-with-waybill
+waybill consort/ready-to-deploy
+moldloft build/3-forgejo-auth
+shakedown sync/gitops-dom-and-replay
+chartroom build/4-catalog-branch-auth
+logbook sync/backup-drill-cronjobs
