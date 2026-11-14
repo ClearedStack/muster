@@ -1,0 +1,91 @@
+# Default-deny ingress and egress for Muster, opening only what SPEC.md
+# and Contract v1 require:
+#   - Ingress TCP 8080 from the 10 workers in cs-workers, plus Conn and
+#     Shipkeeper in clearedstack.
+#   - Egress TCP 5432 to Logbook in clearedstack, UDP/TCP 53 to cluster
+#     DNS in kube-system, and TCP 443/6443 to private cluster addresses
+#     for Kubernetes TokenReview.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: muster
+  namespace: clearedstack
+  labels:
+    app.kubernetes.io/name: muster
+    app.kubernetes.io/part-of: clearedstack
+    app.kubernetes.io/component: control-plane
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: muster
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: cs-workers
+          podSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - trawl
+                  - sextant
+                  - assay
+                  - countersign
+                  - waybill
+                  - moldloft
+                  - shakedown
+                  - chartroom
+                  - tidegauge
+                  - bellbuoy
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: clearedstack
+          podSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - conn
+                  - shipkeeper
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: clearedstack
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: logbook
+      ports:
+        - protocol: TCP
+          port: 5432
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - ipBlock:
+            cidr: 10.0.0.0/8
+        - ipBlock:
+            cidr: 172.16.0.0/12
+        - ipBlock:
+            cidr: 192.168.0.0/16
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 6443

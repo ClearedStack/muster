@@ -1,0 +1,378 @@
+{
+  "about": "A worker with no rule for an item pauses it. Bellbuoy is given one incident step about it. When Shipkeeper reports a new image digest for that worker, every item it paused runs again: back in its old state, in the urgent lane, ahead of everything else.",
+  "seed": {
+    "items": [
+      {
+        "id": "PA-0001",
+        "state": "recorded",
+        "lane": "normal",
+        "next": "sextant"
+      },
+      {
+        "id": "PA-0002",
+        "state": "recorded",
+        "lane": "normal",
+        "next": "sextant"
+      },
+      {
+        "id": "PA-0003",
+        "state": "recorded",
+        "lane": "backfill",
+        "next": "sextant"
+      }
+    ]
+  },
+  "steps": [
+    {
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0001.1.1",
+        "kind": "item",
+        "id": "PA-0001",
+        "state": "recorded",
+        "lane": "normal",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z"
+      }
+    },
+    {
+      "note": "the item leaves the queue",
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/needs_subtool",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0001.1.1"
+      },
+      "status": 200,
+      "want": {
+        "id": "PA-0001",
+        "state": "needs_subtool"
+      }
+    },
+    {
+      "note": "the same call again: the same answer",
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/needs_subtool",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0001.1.1"
+      },
+      "status": 200,
+      "want": {
+        "id": "PA-0001",
+        "state": "needs_subtool"
+      }
+    },
+    {
+      "note": "the rest of the queue carries on",
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0002.2.1",
+        "kind": "item",
+        "id": "PA-0002",
+        "state": "recorded",
+        "lane": "normal",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z"
+      }
+    },
+    {
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/needs_subtool",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0002.2.1"
+      },
+      "status": 200,
+      "want": {
+        "id": "PA-0002",
+        "state": "needs_subtool"
+      }
+    },
+    {
+      "note": "the incident names the state the item was paused from",
+      "as": "bellbuoy",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "incident:PA-0001.4.1",
+        "kind": "incident",
+        "id": "PA-0001",
+        "state": "recorded",
+        "lane": "normal",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z",
+        "incident": {
+          "id": "PA-0001",
+          "worker": "sextant",
+          "code": "E_NEEDS_SUBTOOL",
+          "state": "recorded"
+        }
+      }
+    },
+    {
+      "as": "bellbuoy",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "incident:PA-0001.4.1",
+        "state": "recorded"
+      },
+      "status": 200,
+      "want": {
+        "id": "PA-0001",
+        "state": "recorded"
+      }
+    },
+    {
+      "note": "the first digest ever reported is only noted",
+      "as": "shipkeeper",
+      "method": "POST",
+      "path": "/v1/health",
+      "send": {
+        "contract": "v1",
+        "reports": [
+          {
+            "component": "sextant",
+            "state": "healthy",
+            "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+          }
+        ]
+      },
+      "status": 200,
+      "want": {
+        "received": 1,
+        "replayed": 0,
+        "live": 0
+      }
+    },
+    {
+      "note": "the same digest again: nothing to replay",
+      "as": "shipkeeper",
+      "method": "POST",
+      "path": "/v1/health",
+      "send": {
+        "contract": "v1",
+        "reports": [
+          {
+            "component": "sextant",
+            "state": "healthy",
+            "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+          }
+        ]
+      },
+      "status": 200,
+      "want": {
+        "received": 1,
+        "replayed": 0,
+        "live": 0
+      }
+    },
+    {
+      "note": "another worker's digest does not replay Sextant's items",
+      "as": "shipkeeper",
+      "method": "POST",
+      "path": "/v1/health",
+      "send": {
+        "contract": "v1",
+        "reports": [
+          {
+            "component": "assay",
+            "state": "healthy",
+            "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+          }
+        ]
+      },
+      "status": 200,
+      "want": {
+        "received": 1,
+        "replayed": 0,
+        "live": 0
+      }
+    },
+    {
+      "note": "a report with no digest replays nothing",
+      "as": "shipkeeper",
+      "method": "POST",
+      "path": "/v1/health",
+      "send": {
+        "contract": "v1",
+        "reports": [
+          {
+            "component": "sextant",
+            "state": "degraded",
+            "code": "E_NEEDS_SUBTOOL"
+          }
+        ]
+      },
+      "status": 200,
+      "want": {
+        "received": 1,
+        "replayed": 0,
+        "live": 0
+      }
+    },
+    {
+      "note": "a new digest for Sextant: both paused items are replayed",
+      "as": "shipkeeper",
+      "method": "POST",
+      "path": "/v1/health",
+      "send": {
+        "contract": "v1",
+        "reports": [
+          {
+            "component": "sextant",
+            "state": "healthy",
+            "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+          }
+        ]
+      },
+      "status": 200,
+      "want": {
+        "received": 1,
+        "replayed": 2,
+        "live": 0
+      }
+    },
+    {
+      "note": "replayed items are urgent, ahead of the backfill item that was waiting, in the order they were paused",
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0001.6.1",
+        "kind": "item",
+        "id": "PA-0001",
+        "state": "recorded",
+        "lane": "urgent",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z"
+      }
+    },
+    {
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0002.7.1",
+        "kind": "item",
+        "id": "PA-0002",
+        "state": "recorded",
+        "lane": "urgent",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z"
+      }
+    },
+    {
+      "note": "then the backfill item",
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0003.3.1",
+        "kind": "item",
+        "id": "PA-0003",
+        "state": "recorded",
+        "lane": "backfill",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z"
+      }
+    },
+    {
+      "note": "back in recorded, so the usual move works",
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0001.6.1",
+        "state": "observed"
+      },
+      "status": 200,
+      "want": {
+        "id": "PA-0001",
+        "state": "observed",
+        "next": "assay"
+      }
+    },
+    {
+      "note": "nothing is paused any more",
+      "as": "shipkeeper",
+      "method": "POST",
+      "path": "/v1/health",
+      "send": {
+        "contract": "v1",
+        "reports": [
+          {
+            "component": "sextant",
+            "state": "healthy",
+            "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+          }
+        ]
+      },
+      "status": 200,
+      "want": {
+        "received": 1,
+        "replayed": 0,
+        "live": 0
+      }
+    },
+    {
+      "note": "the second item's incident is still Bellbuoy's to deal with, replayed or not",
+      "as": "bellbuoy",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "incident:PA-0002.5.1",
+        "kind": "incident",
+        "id": "PA-0002",
+        "state": "recorded",
+        "lane": "normal",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z",
+        "incident": {
+          "id": "PA-0002",
+          "worker": "sextant",
+          "code": "E_NEEDS_SUBTOOL",
+          "state": "recorded"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+# How ko builds the Muster image, straight from source. There is no
+# Dockerfile.
+#
+#   ko build ./cmd/muster
+#
+# ko's default base image is a static, shell-less image whose user is
+# not root, which is what Muster needs: it is one static binary, it
+# writes nothing to disk and it asks for no privileges.
+builds:
+  - id: muster
+    main: ./cmd/muster
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s
+      - -w

@@ -1,0 +1,118 @@
+{
+  "about": "A worker is offered the urgent lane first, then normal, then backfill, and within a lane the item that arrived first.",
+  "seed": {
+    "items": [
+      {
+        "id": "PA-0001",
+        "state": "recorded",
+        "lane": "backfill",
+        "next": "sextant"
+      },
+      {
+        "id": "PA-0002",
+        "state": "recorded",
+        "lane": "normal",
+        "next": "sextant"
+      },
+      {
+        "id": "PA-0003",
+        "state": "recorded",
+        "lane": "urgent",
+        "next": "sextant"
+      },
+      {
+        "id": "PA-0004",
+        "state": "recorded",
+        "lane": "normal",
+        "next": "sextant"
+      }
+    ]
+  },
+  "steps": [
+    {
+      "note": "urgent comes first, though it was listed third",
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0003.3.1",
+        "kind": "item",
+        "id": "PA-0003",
+        "state": "recorded",
+        "lane": "urgent",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z"
+      }
+    },
+    {
+      "note": "then normal, in order of arrival",
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0002.2.1",
+        "kind": "item",
+        "id": "PA-0002",
+        "state": "recorded",
+        "lane": "normal",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z"
+      }
+    },
+    {
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0004.4.1",
+        "kind": "item",
+        "id": "PA-0004",
+        "state": "recorded",
+        "lane": "normal",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z"
+      }
+    },
+    {
+      "note": "backfill only when both other lanes are empty",
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0001.1.1",
+        "kind": "item",
+        "id": "PA-0001",
+        "state": "recorded",
+        "lane": "backfill",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z"
+      }
+    },
+    {
+      "note": "nothing is left: no content",
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 204
+    }
+  ]
+}

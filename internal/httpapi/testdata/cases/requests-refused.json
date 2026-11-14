@@ -1,0 +1,182 @@
+{
+  "about": "A call that cannot be read is refused before anything is done: not JSON, a field the call does not define, more than one value, the wrong content type, no body.",
+  "seed": {
+    "items": [
+      {
+        "id": "PA-0001",
+        "state": "recorded",
+        "lane": "normal",
+        "next": "sextant"
+      }
+    ]
+  },
+  "steps": [
+    {
+      "note": "not JSON",
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send_raw": "lease please",
+      "status": 400,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "not_json",
+        "reason": "the request is not one json value"
+      }
+    },
+    {
+      "note": "a field the call does not define",
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1",
+        "worker": "assay"
+      },
+      "status": 400,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "unknown_field",
+        "reason": "the request has a field this call does not define"
+      }
+    },
+    {
+      "note": "two values",
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send_raw": "{\"contract\":\"v1\"}{\"contract\":\"v1\"}",
+      "status": 400,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "not_json",
+        "reason": "the request is not one json value"
+      }
+    },
+    {
+      "note": "the wrong content type",
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/lease",
+      "type": "text/plain",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 415,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "wrong_type",
+        "reason": "the content type must be application/json"
+      }
+    },
+    {
+      "note": "no body and no content type",
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/lease",
+      "status": 415,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "wrong_type",
+        "reason": "the content type must be application/json"
+      }
+    },
+    {
+      "note": "an empty body",
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send_raw": "",
+      "status": 400,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "not_json",
+        "reason": "the request is not one json value"
+      }
+    },
+    {
+      "note": "a field of the wrong type",
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": 1
+      },
+      "status": 400,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "bad_field",
+        "reason": "a field does not have the form this call requires"
+      }
+    },
+    {
+      "note": "a JSON value that is not an object",
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send_raw": "\"v1\"",
+      "status": 400,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "bad_field",
+        "reason": "a field does not have the form this call requires"
+      }
+    },
+    {
+      "note": "a result must be a JSON object",
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0001.999.1",
+        "state": "observed",
+        "result": [
+          1,
+          2
+        ]
+      },
+      "status": 400,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "bad_field",
+        "reason": "a field does not have the form this call requires"
+      }
+    },
+    {
+      "note": "no state named",
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0001.999.1"
+      },
+      "status": 400,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "missing_field",
+        "reason": "a required field is missing"
+      }
+    },
+    {
+      "note": "none of that touched the queue: first attempt",
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0001.1.1",
+        "kind": "item",
+        "id": "PA-0001",
+        "state": "recorded",
+        "lane": "normal",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z"
+      }
+    }
+  ]
+}

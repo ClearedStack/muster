@@ -1,0 +1,54 @@
+{
+  "about": "A finished result is not thrown away for arriving late. An expired lease still counts until someone else has taken the item.",
+  "seed": {
+    "items": [
+      {
+        "id": "PA-0001",
+        "state": "recorded",
+        "lane": "normal",
+        "next": "sextant"
+      }
+    ]
+  },
+  "steps": [
+    {
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0001.1.1",
+        "kind": "item",
+        "id": "PA-0001",
+        "state": "recorded",
+        "lane": "normal",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z"
+      }
+    },
+    {
+      "note": "ten minutes late, and nobody else took the item",
+      "wait": "10m",
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0001.1.1",
+        "state": "observed",
+        "result": {
+          "job": "made-up job"
+        }
+      },
+      "status": 200,
+      "want": {
+        "id": "PA-0001",
+        "state": "observed",
+        "next": "assay"
+      }
+    }
+  ]
+}

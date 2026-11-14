@@ -1,0 +1,98 @@
+{
+  "about": "The fail call takes E_TIMEOUT or E_PARSE. A missing rule has a call of its own, and no other code exists.",
+  "seed": {
+    "items": [
+      {
+        "id": "PA-0001",
+        "state": "recorded",
+        "lane": "normal",
+        "next": "sextant"
+      }
+    ]
+  },
+  "steps": [
+    {
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0001.1.1",
+        "kind": "item",
+        "id": "PA-0001",
+        "state": "recorded",
+        "lane": "normal",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z"
+      }
+    },
+    {
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/fail",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0001.1.1",
+        "code": "E_NEEDS_SUBTOOL"
+      },
+      "status": 400,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "bad_field",
+        "reason": "report a missing rule with the needs_subtool call"
+      }
+    },
+    {
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/fail",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0001.1.1",
+        "code": "E_OTHER"
+      },
+      "status": 400,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "bad_field",
+        "reason": "a field does not have the form this call requires"
+      }
+    },
+    {
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/fail",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0001.1.1",
+        "code": ""
+      },
+      "status": 400,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "missing_field",
+        "reason": "a required field is missing"
+      }
+    },
+    {
+      "note": "the refusals changed nothing",
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/fail",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0001.1.1",
+        "code": "E_TIMEOUT"
+      },
+      "status": 200,
+      "want": {
+        "id": "PA-0001",
+        "state": "recorded",
+        "next": "sextant"
+      }
+    }
+  ]
+}

@@ -1,0 +1,170 @@
+[
+  {
+    "status": 400,
+    "error": "E_PARSE",
+    "cause": "not_json",
+    "reason": "the request is not one json value"
+  },
+  {
+    "status": 400,
+    "error": "E_PARSE",
+    "cause": "unknown_field",
+    "reason": "the request has a field this call does not define"
+  },
+  {
+    "status": 400,
+    "error": "E_PARSE",
+    "cause": "missing_field",
+    "reason": "a required field is missing"
+  },
+  {
+    "status": 400,
+    "error": "E_PARSE",
+    "cause": "bad_field",
+    "reason": "a field does not have the form this call requires"
+  },
+  {
+    "status": 400,
+    "error": "E_PARSE",
+    "cause": "bad_field",
+    "reason": "report a missing rule with the needs_subtool call"
+  },
+  {
+    "status": 400,
+    "error": "E_PARSE",
+    "cause": "bad_field",
+    "reason": "the proof of work is not valid"
+  },
+  {
+    "status": 400,
+    "error": "E_PARSE",
+    "cause": "bad_field",
+    "reason": "the target is not in the ownership map"
+  },
+  {
+    "status": 400,
+    "error": "E_PARSE",
+    "cause": "bad_field",
+    "reason": "nothing is left of the text once markup is removed"
+  },
+  {
+    "status": 400,
+    "error": "E_PARSE",
+    "cause": "bad_field",
+    "reason": "the record store refused a field"
+  },
+  {
+    "status": 401,
+    "error": "E_PARSE",
+    "cause": "no_credential",
+    "reason": "no valid credential was presented"
+  },
+  {
+    "status": 403,
+    "error": "E_PARSE",
+    "cause": "not_your_call",
+    "reason": "this caller may not make this call"
+  },
+  {
+    "status": 404,
+    "error": "E_PARSE",
+    "cause": "no_such_call",
+    "reason": "no such call"
+  },
+  {
+    "status": 405,
+    "error": "E_PARSE",
+    "cause": "wrong_method",
+    "reason": "this call does not accept that method"
+  },
+  {
+    "status": 413,
+    "error": "E_PARSE",
+    "cause": "too_large",
+    "reason": "the request is too large"
+  },
+  {
+    "status": 415,
+    "error": "E_PARSE",
+    "cause": "wrong_type",
+    "reason": "the content type must be application/json"
+  },
+  {
+    "status": 409,
+    "error": "E_PARSE",
+    "cause": "lease_not_held",
+    "reason": "the lease is not held"
+  },
+  {
+    "status": 409,
+    "error": "E_PARSE",
+    "cause": "move_not_allowed",
+    "reason": "that move is not allowed"
+  },
+  {
+    "status": 409,
+    "error": "E_PARSE",
+    "cause": "duplicate",
+    "reason": "the same component is reported twice in one batch"
+  },
+  {
+    "status": 422,
+    "error": "E_NEEDS_SUBTOOL",
+    "cause": "unknown_contract",
+    "reason": "this contract version is not known"
+  },
+  {
+    "status": 422,
+    "error": "E_NEEDS_SUBTOOL",
+    "cause": "unknown_value",
+    "reason": "this health state is not known"
+  },
+  {
+    "status": 422,
+    "error": "E_NEEDS_SUBTOOL",
+    "cause": "unknown_value",
+    "reason": "this source is not known"
+  },
+  {
+    "status": 422,
+    "error": "E_NEEDS_SUBTOOL",
+    "cause": "unknown_value",
+    "reason": "the record store has no rule for a value"
+  },
+  {
+    "status": 429,
+    "error": "E_TIMEOUT",
+    "cause": "rate_limited",
+    "reason": "too many submissions from this visitor today; try again tomorrow"
+  },
+  {
+    "status": 503,
+    "error": "E_TIMEOUT",
+    "cause": "store_slow",
+    "reason": "the record store took too long"
+  },
+  {
+    "status": 503,
+    "error": "E_TIMEOUT",
+    "cause": "busy",
+    "reason": "too busy; try again"
+  },
+  {
+    "status": 503,
+    "error": "E_TIMEOUT",
+    "cause": "busy",
+    "reason": "the identity check took too long; try again"
+  },
+  {
+    "status": 500,
+    "error": "E_PARSE",
+    "cause": "bad_record",
+    "reason": "a stored record was not consistent and has been set aside"
+  },
+  {
+    "status": 500,
+    "error": "E_PARSE",
+    "cause": "unexpected",
+    "reason": "an unexpected condition; the request was refused"
+  }
+]

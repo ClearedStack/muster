@@ -1,0 +1,144 @@
+{
+  "about": "Only an item in recorded, observed or approved can be paused for a missing rule.",
+  "seed": {
+    "items": [
+      {
+        "id": "PA-0001",
+        "state": "discovered",
+        "lane": "normal",
+        "next": "trawl"
+      },
+      {
+        "id": "PA-0002",
+        "state": "scored",
+        "lane": "normal",
+        "next": "countersign"
+      },
+      {
+        "id": "PA-0003",
+        "state": "approved",
+        "lane": "normal",
+        "next": "waybill"
+      }
+    ]
+  },
+  "steps": [
+    {
+      "as": "trawl",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0001.1.1",
+        "kind": "item",
+        "id": "PA-0001",
+        "state": "discovered",
+        "lane": "normal",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z"
+      }
+    },
+    {
+      "note": "discovered has no move to needs_subtool",
+      "as": "trawl",
+      "method": "POST",
+      "path": "/v1/needs_subtool",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0001.1.1"
+      },
+      "status": 409,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "move_not_allowed",
+        "reason": "that move is not allowed"
+      }
+    },
+    {
+      "as": "countersign",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0002.2.1",
+        "kind": "item",
+        "id": "PA-0002",
+        "state": "scored",
+        "lane": "normal",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z"
+      }
+    },
+    {
+      "note": "a scored item waits for a person, not for a rule",
+      "as": "countersign",
+      "method": "POST",
+      "path": "/v1/needs_subtool",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0002.2.1"
+      },
+      "status": 409,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "move_not_allowed",
+        "reason": "that move is not allowed"
+      }
+    },
+    {
+      "as": "waybill",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "PA-0003.3.1",
+        "kind": "item",
+        "id": "PA-0003",
+        "state": "approved",
+        "lane": "normal",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z"
+      }
+    },
+    {
+      "note": "approved can be paused",
+      "as": "waybill",
+      "method": "POST",
+      "path": "/v1/needs_subtool",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0003.3.1"
+      },
+      "status": 200,
+      "want": {
+        "id": "PA-0003",
+        "state": "needs_subtool"
+      }
+    },
+    {
+      "note": "a lease that was never given",
+      "as": "sextant",
+      "method": "POST",
+      "path": "/v1/needs_subtool",
+      "send": {
+        "contract": "v1",
+        "lease": "PA-0004.999.1"
+      },
+      "status": 409,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "lease_not_held",
+        "reason": "the lease is not held"
+      }
+    }
+  ]
+}

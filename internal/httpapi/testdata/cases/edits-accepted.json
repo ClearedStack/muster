@@ -1,0 +1,444 @@
+{
+  "about": "A proposal that passes the checks is kept as pending_approval and queued for Countersign. Approved, it goes to Bellbuoy in the urgent lane; declined, it goes nowhere. It goes live when Shipkeeper reports a new digest for its repository.",
+  "steps": [
+    {
+      "note": "kept: the answer names the proposal and its status",
+      "as": "conn",
+      "method": "POST",
+      "path": "/v1/edits",
+      "send": {
+        "contract": "v1",
+        "target": "catalog.sample-calculator.description",
+        "change": "The sample description should say which made-up rule it follows.",
+        "reason": "It reads as if no rule applies.",
+        "pow": "2026-01-05.208bd",
+        "honeypot": "",
+        "source": "203.0.113.7"
+      },
+      "status": 202,
+      "want": {
+        "id": "EP-0001",
+        "status": "pending_approval"
+      }
+    },
+    {
+      "as": "conn",
+      "method": "POST",
+      "path": "/v1/edits",
+      "send": {
+        "contract": "v1",
+        "target": "sextant.sample-portal.options",
+        "change": "Set the made-up option to 3.",
+        "reason": "",
+        "pow": "2026-01-05.10c7a2",
+        "honeypot": "",
+        "source": "2001:db8::7"
+      },
+      "status": 202,
+      "want": {
+        "id": "EP-0002",
+        "status": "pending_approval"
+      }
+    },
+    {
+      "as": "conn",
+      "method": "POST",
+      "path": "/v1/edits",
+      "send": {
+        "contract": "v1",
+        "target": "sextant.sample-portal.options",
+        "change": "Set the made-up option to 4.",
+        "reason": "",
+        "pow": "2026-01-05.295ca5",
+        "honeypot": "",
+        "source": "2001:db8::8"
+      },
+      "status": 202,
+      "want": {
+        "id": "EP-0003",
+        "status": "pending_approval"
+      }
+    },
+    {
+      "note": "Countersign is shown what kind of edit it is and which repository and file own the element",
+      "as": "countersign",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "EP-0001.1.1",
+        "kind": "proposal",
+        "id": "EP-0001",
+        "state": "pending_approval",
+        "lane": "normal",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z",
+        "proposal": {
+          "target": "catalog.sample-calculator.description",
+          "repository": "clearedstack.com",
+          "file": "src/data/sample-catalog.json",
+          "edit_kind": "DATA",
+          "change": "The sample description should say which made-up rule it follows.",
+          "reason": "It reads as if no rule applies."
+        }
+      }
+    },
+    {
+      "note": "a proposal cannot be paused for a missing rule",
+      "as": "countersign",
+      "method": "POST",
+      "path": "/v1/needs_subtool",
+      "send": {
+        "contract": "v1",
+        "lease": "EP-0001.1.1"
+      },
+      "status": 409,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "move_not_allowed",
+        "reason": "that move is not allowed"
+      }
+    },
+    {
+      "note": "approved, with a result: Bellbuoy is next, in the urgent lane",
+      "as": "countersign",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "EP-0001.1.1",
+        "state": "approved",
+        "result": {
+          "note": "made-up note from the owner"
+        }
+      },
+      "status": 200,
+      "want": {
+        "id": "EP-0001",
+        "state": "approved",
+        "next": "bellbuoy"
+      }
+    },
+    {
+      "as": "countersign",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "EP-0002.2.1",
+        "kind": "proposal",
+        "id": "EP-0002",
+        "state": "pending_approval",
+        "lane": "normal",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z",
+        "proposal": {
+          "target": "sextant.sample-portal.options",
+          "repository": "sextant",
+          "file": "tools/sample-portal/options.json",
+          "edit_kind": "CONFIG",
+          "change": "Set the made-up option to 3.",
+          "reason": ""
+        }
+      }
+    },
+    {
+      "as": "countersign",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "EP-0002.2.1",
+        "state": "approved"
+      },
+      "status": 200,
+      "want": {
+        "id": "EP-0002",
+        "state": "approved",
+        "next": "bellbuoy"
+      }
+    },
+    {
+      "as": "countersign",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "EP-0003.3.1",
+        "kind": "proposal",
+        "id": "EP-0003",
+        "state": "pending_approval",
+        "lane": "normal",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z",
+        "proposal": {
+          "target": "sextant.sample-portal.options",
+          "repository": "sextant",
+          "file": "tools/sample-portal/options.json",
+          "edit_kind": "CONFIG",
+          "change": "Set the made-up option to 4.",
+          "reason": ""
+        }
+      }
+    },
+    {
+      "note": "declined: no step follows",
+      "as": "countersign",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "EP-0003.3.1",
+        "state": "declined"
+      },
+      "status": 200,
+      "want": {
+        "id": "EP-0003",
+        "state": "declined"
+      }
+    },
+    {
+      "note": "with what Countersign gave, under results.countersign",
+      "as": "bellbuoy",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "EP-0001.4.1",
+        "kind": "proposal",
+        "id": "EP-0001",
+        "state": "approved",
+        "lane": "urgent",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z",
+        "results": {
+          "countersign": {
+            "note": "made-up note from the owner"
+          }
+        },
+        "proposal": {
+          "target": "catalog.sample-calculator.description",
+          "repository": "clearedstack.com",
+          "file": "src/data/sample-catalog.json",
+          "edit_kind": "DATA",
+          "change": "The sample description should say which made-up rule it follows.",
+          "reason": "It reads as if no rule applies."
+        }
+      }
+    },
+    {
+      "as": "bellbuoy",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "EP-0001.4.1",
+        "state": "building"
+      },
+      "status": 200,
+      "want": {
+        "id": "EP-0001",
+        "state": "building"
+      }
+    },
+    {
+      "as": "bellbuoy",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 200,
+      "want": {
+        "lease": "EP-0002.5.1",
+        "kind": "proposal",
+        "id": "EP-0002",
+        "state": "approved",
+        "lane": "urgent",
+        "attempt": 1,
+        "expires": "2026-01-05T09:01:00Z",
+        "proposal": {
+          "target": "sextant.sample-portal.options",
+          "repository": "sextant",
+          "file": "tools/sample-portal/options.json",
+          "edit_kind": "CONFIG",
+          "change": "Set the made-up option to 3.",
+          "reason": ""
+        }
+      }
+    },
+    {
+      "note": "going live is not Bellbuoy's move",
+      "as": "bellbuoy",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "EP-0002.5.1",
+        "state": "live"
+      },
+      "status": 409,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "move_not_allowed",
+        "reason": "that move is not allowed"
+      }
+    },
+    {
+      "as": "bellbuoy",
+      "method": "POST",
+      "path": "/v1/complete",
+      "send": {
+        "contract": "v1",
+        "lease": "EP-0002.5.1",
+        "state": "building"
+      },
+      "status": 200,
+      "want": {
+        "id": "EP-0002",
+        "state": "building"
+      }
+    },
+    {
+      "note": "nothing else is Bellbuoy's",
+      "as": "bellbuoy",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 204
+    },
+    {
+      "note": "the first digest ever reported for a component is only noted",
+      "as": "shipkeeper",
+      "method": "POST",
+      "path": "/v1/health",
+      "send": {
+        "contract": "v1",
+        "reports": [
+          {
+            "component": "conn",
+            "state": "healthy",
+            "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+          },
+          {
+            "component": "sextant",
+            "state": "healthy",
+            "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+          }
+        ]
+      },
+      "status": 200,
+      "want": {
+        "received": 2,
+        "replayed": 0,
+        "live": 0
+      }
+    },
+    {
+      "note": "a new digest for Conn: the proposal building in its repository goes live",
+      "as": "shipkeeper",
+      "method": "POST",
+      "path": "/v1/health",
+      "send": {
+        "contract": "v1",
+        "reports": [
+          {
+            "component": "conn",
+            "state": "healthy",
+            "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+          }
+        ]
+      },
+      "status": 200,
+      "want": {
+        "received": 1,
+        "replayed": 0,
+        "live": 1
+      }
+    },
+    {
+      "note": "once",
+      "as": "shipkeeper",
+      "method": "POST",
+      "path": "/v1/health",
+      "send": {
+        "contract": "v1",
+        "reports": [
+          {
+            "component": "conn",
+            "state": "healthy",
+            "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+          }
+        ]
+      },
+      "status": 200,
+      "want": {
+        "received": 1,
+        "replayed": 0,
+        "live": 0
+      }
+    },
+    {
+      "note": "a refused batch changes nothing",
+      "as": "shipkeeper",
+      "method": "POST",
+      "path": "/v1/health",
+      "send": {
+        "contract": "v1",
+        "reports": [
+          {
+            "component": "assay",
+            "state": "healthy",
+            "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+          },
+          {
+            "component": "assay2",
+            "state": "healthy"
+          }
+        ]
+      },
+      "status": 400,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "bad_field",
+        "reason": "a field does not have the form this call requires"
+      }
+    },
+    {
+      "note": "a new digest for Sextant: its proposal goes live too",
+      "as": "shipkeeper",
+      "method": "POST",
+      "path": "/v1/health",
+      "send": {
+        "contract": "v1",
+        "reports": [
+          {
+            "component": "sextant",
+            "state": "healthy",
+            "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+          }
+        ]
+      },
+      "status": 200,
+      "want": {
+        "received": 1,
+        "replayed": 0,
+        "live": 1
+      }
+    }
+  ]
+}

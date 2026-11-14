@@ -1,0 +1,224 @@
+{
+  "cases": [
+    {
+      "name": "a token that solves the puzzle",
+      "token": "2026-01-05.e8206",
+      "target": "catalog/sample-calculator/description",
+      "change": "A made-up change.",
+      "reason": "A made-up reason.",
+      "bits": 20,
+      "now": "2026-01-05T09:00:00Z",
+      "valid": true
+    },
+    {
+      "name": "the zero bits it shows",
+      "token": "2026-01-05.e8206",
+      "target": "catalog/sample-calculator/description",
+      "change": "A made-up change.",
+      "reason": "A made-up reason.",
+      "bits": 23,
+      "now": "2026-01-05T09:00:00Z",
+      "valid": true
+    },
+    {
+      "name": "one more bit than it shows",
+      "token": "2026-01-05.e8206",
+      "target": "catalog/sample-calculator/description",
+      "change": "A made-up change.",
+      "reason": "A made-up reason.",
+      "bits": 24,
+      "now": "2026-01-05T09:00:00Z",
+      "valid": false
+    },
+    {
+      "name": "a token good for 12 bits, asked for 12",
+      "token": "2026-01-05.412e",
+      "target": "catalog/sample-calculator/description",
+      "change": "A made-up change.",
+      "reason": "A made-up reason.",
+      "bits": 12,
+      "now": "2026-01-05T09:00:00Z",
+      "valid": true
+    },
+    {
+      "name": "the same token, asked for 20",
+      "token": "2026-01-05.412e",
+      "target": "catalog/sample-calculator/description",
+      "change": "A made-up change.",
+      "reason": "A made-up reason.",
+      "bits": 20,
+      "now": "2026-01-05T09:00:00Z",
+      "valid": false
+    },
+    {
+      "name": "a different change",
+      "token": "2026-01-05.e8206",
+      "target": "catalog/sample-calculator/description",
+      "change": "Another made-up change.",
+      "reason": "A made-up reason.",
+      "bits": 20,
+      "now": "2026-01-05T09:00:00Z",
+      "valid": false
+    },
+    {
+      "name": "a different reason",
+      "token": "2026-01-05.e8206",
+      "target": "catalog/sample-calculator/description",
+      "change": "A made-up change.",
+      "reason": "Another made-up reason.",
+      "bits": 20,
+      "now": "2026-01-05T09:00:00Z",
+      "valid": false
+    },
+    {
+      "name": "a different target",
+      "token": "2026-01-05.e8206",
+      "target": "sextant/sample-portal/options",
+      "change": "A made-up change.",
+      "reason": "A made-up reason.",
+      "bits": 20,
+      "now": "2026-01-05T09:00:00Z",
+      "valid": false
+    },
+    {
+      "name": "text moved from the change to the reason",
+      "token": "2026-01-05.e8206",
+      "target": "catalog/sample-calculator/description",
+      "change": "A made-up",
+      "reason": " change.A made-up reason.",
+      "bits": 20,
+      "now": "2026-01-05T09:00:00Z",
+      "valid": false
+    },
+    {
+      "name": "text that is not ASCII",
+      "token": "2026-01-05.1255d",
+      "target": "catalog/sample-calculator/description",
+      "change": "Ünïcode ✓ made-up change",
+      "reason": "A made-up reason.",
+      "bits": 20,
+      "now": "2026-01-05T09:00:00Z",
+      "valid": true
+    },
+    {
+      "name": "yesterday's token",
+      "token": "2026-01-04.4031af",
+      "target": "catalog/sample-calculator/description",
+      "change": "A made-up change.",
+      "reason": "A made-up reason.",
+      "bits": 20,
+      "now": "2026-01-05T09:00:00Z",
+      "valid": true
+    },
+    {
+      "name": "yesterday's token one second before midnight",
+      "token": "2026-01-04.4031af",
+      "target": "catalog/sample-calculator/description",
+      "change": "A made-up change.",
+      "reason": "A made-up reason.",
+      "bits": 20,
+      "now": "2026-01-05T23:59:59Z",
+      "valid": true
+    },
+    {
+      "name": "yesterday's token at midnight is two days old",
+      "token": "2026-01-04.4031af",
+      "target": "catalog/sample-calculator/description",
+      "change": "A made-up change.",
+      "reason": "A made-up reason.",
+      "bits": 20,
+      "now": "2026-01-06T00:00:00Z",
+      "valid": false
+    },
+    {
+      "name": "a token two days old",
+      "token": "2026-01-03.491c0f",
+      "target": "catalog/sample-calculator/description",
+      "change": "A made-up change.",
+      "reason": "A made-up reason.",
+      "bits": 20,
+      "now": "2026-01-05T09:00:00Z",
+      "valid": false
+    },
+    {
+      "name": "a token dated tomorrow",
+      "token": "2026-01-06.47969",
+      "target": "catalog/sample-calculator/description",
+      "change": "A made-up change.",
+      "reason": "A made-up reason.",
+      "bits": 20,
+      "now": "2026-01-05T09:00:00Z",
+      "valid": false
+    },
+    {
+      "name": "the right nonce under the wrong date",
+      "token": "2026-01-04.e8206",
+      "target": "catalog/sample-calculator/description",
+      "change": "A made-up change.",
+      "reason": "A made-up reason.",
+      "bits": 20,
+      "now": "2026-01-05T09:00:00Z",
+      "valid": false
+    },
+    {
+      "name": "an upper-case nonce",
+      "token": "2026-01-05.E8206",
+      "target": "catalog/sample-calculator/description",
+      "change": "A made-up change.",
+      "reason": "A made-up reason.",
+      "bits": 20,
+      "now": "2026-01-05T09:00:00Z",
+      "valid": false
+    },
+    {
+      "name": "no date",
+      "token": "e8206",
+      "target": "catalog/sample-calculator/description",
+      "change": "A made-up change.",
+      "reason": "A made-up reason.",
+      "bits": 20,
+      "now": "2026-01-05T09:00:00Z",
+      "valid": false
+    },
+    {
+      "name": "no nonce",
+      "token": "2026-01-05.",
+      "target": "catalog/sample-calculator/description",
+      "change": "A made-up change.",
+      "reason": "A made-up reason.",
+      "bits": 20,
+      "now": "2026-01-05T09:00:00Z",
+      "valid": false
+    },
+    {
+      "name": "a nonce that is too long",
+      "token": "2026-01-05.000000000000000000000000000000000",
+      "target": "catalog/sample-calculator/description",
+      "change": "A made-up change.",
+      "reason": "A made-up reason.",
+      "bits": 20,
+      "now": "2026-01-05T09:00:00Z",
+      "valid": false
+    },
+    {
+      "name": "an empty token",
+      "token": "",
+      "target": "catalog/sample-calculator/description",
+      "change": "A made-up change.",
+      "reason": "A made-up reason.",
+      "bits": 20,
+      "now": "2026-01-05T09:00:00Z",
+      "valid": false
+    },
+    {
+      "name": "white space around a good token",
+      "token": " 2026-01-05.e8206",
+      "target": "catalog/sample-calculator/description",
+      "change": "A made-up change.",
+      "reason": "A made-up reason.",
+      "bits": 20,
+      "now": "2026-01-05T09:00:00Z",
+      "valid": false
+    }
+  ]
+}

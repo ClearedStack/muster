@@ -1,0 +1,148 @@
+{
+  "about": "Check 2. A submission with the hidden field filled in is dropped without a trace: no error, no record, nothing queued.",
+  "steps": [
+    {
+      "note": "the hidden field is filled in",
+      "as": "conn",
+      "method": "POST",
+      "path": "/v1/edits",
+      "send": {
+        "contract": "v1",
+        "target": "catalog.sample-calculator.description",
+        "change": "The sample description should say which made-up rule it follows.",
+        "reason": "It reads as if no rule applies.",
+        "pow": "2026-01-05.208bd",
+        "honeypot": "made-up text",
+        "source": "203.0.113.7"
+      },
+      "status": 204
+    },
+    {
+      "note": "nothing was queued",
+      "as": "countersign",
+      "method": "POST",
+      "path": "/v1/lease",
+      "send": {
+        "contract": "v1"
+      },
+      "status": 204
+    },
+    {
+      "note": "it is the second check: a bad token is refused before the hidden field is looked at",
+      "as": "conn",
+      "method": "POST",
+      "path": "/v1/edits",
+      "send": {
+        "contract": "v1",
+        "target": "catalog.sample-calculator.description",
+        "change": "The sample description should say which made-up rule it follows.",
+        "reason": "It reads as if no rule applies.",
+        "pow": "2026-01-05.0",
+        "honeypot": "made-up text",
+        "source": "203.0.113.7"
+      },
+      "status": 400,
+      "want": {
+        "error": "E_PARSE",
+        "cause": "bad_field",
+        "reason": "the proof of work is not valid"
+      }
+    },
+    {
+      "note": "and it did not count against the source: five more are still kept",
+      "as": "conn",
+      "method": "POST",
+      "path": "/v1/edits",
+      "send": {
+        "contract": "v1",
+        "target": "catalog.sample-calculator.description",
+        "change": "Made-up change 1.",
+        "reason": "It reads as if no rule applies.",
+        "pow": "2026-01-05.2afe",
+        "honeypot": "",
+        "source": "203.0.113.7"
+      },
+      "status": 202,
+      "want": {
+        "id": "EP-0001",
+        "status": "pending_approval"
+      }
+    },
+    {
+      "as": "conn",
+      "method": "POST",
+      "path": "/v1/edits",
+      "send": {
+        "contract": "v1",
+        "target": "catalog.sample-calculator.description",
+        "change": "Made-up change 2.",
+        "reason": "It reads as if no rule applies.",
+        "pow": "2026-01-05.4db1a",
+        "honeypot": "",
+        "source": "203.0.113.7"
+      },
+      "status": 202,
+      "want": {
+        "id": "EP-0002",
+        "status": "pending_approval"
+      }
+    },
+    {
+      "as": "conn",
+      "method": "POST",
+      "path": "/v1/edits",
+      "send": {
+        "contract": "v1",
+        "target": "catalog.sample-calculator.description",
+        "change": "Made-up change 3.",
+        "reason": "It reads as if no rule applies.",
+        "pow": "2026-01-05.2f426",
+        "honeypot": "",
+        "source": "203.0.113.7"
+      },
+      "status": 202,
+      "want": {
+        "id": "EP-0003",
+        "status": "pending_approval"
+      }
+    },
+    {
+      "as": "conn",
+      "method": "POST",
+      "path": "/v1/edits",
+      "send": {
+        "contract": "v1",
+        "target": "catalog.sample-calculator.description",
+        "change": "Made-up change 4.",
+        "reason": "It reads as if no rule applies.",
+        "pow": "2026-01-05.8d6a3",
+        "honeypot": "",
+        "source": "203.0.113.7"
+      },
+      "status": 202,
+      "want": {
+        "id": "EP-0004",
+        "status": "pending_approval"
+      }
+    },
+    {
+      "as": "conn",
+      "method": "POST",
+      "path": "/v1/edits",
+      "send": {
+        "contract": "v1",
+        "target": "catalog.sample-calculator.description",
+        "change": "Made-up change 5.",
+        "reason": "It reads as if no rule applies.",
+        "pow": "2026-01-05.4a32c",
+        "honeypot": "",
+        "source": "203.0.113.7"
+      },
+      "status": 202,
+      "want": {
+        "id": "EP-0005",
+        "status": "pending_approval"
+      }
+    }
+  ]
+}
