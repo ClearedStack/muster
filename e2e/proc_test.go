@@ -74,6 +74,9 @@ func (e *env) start(name, bin string, args []string, extra ...string) *proc {
 		e.t.Fatalf("starting %s: %v", name, err)
 	}
 	p := &proc{name: name, cmd: cmd, logPath: logPath, done: make(chan struct{})}
+	e.mu.Lock()
+	e.lastProc[name] = p
+	e.mu.Unlock()
 	go func() {
 		p.exit = cmd.Wait()
 		logFile.Close()

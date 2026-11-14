@@ -86,7 +86,10 @@ func (e *env) bare(repo string) string {
 
 // git runs git against one bare repository.
 func (e *env) git(repo string, args ...string) (string, error) {
-	out, err := exec.Command("git", append([]string{"--git-dir", e.bare(repo)}, args...)...).CombinedOutput()
+	out, err := exec.Command("git", append([]string{"--git-dir", e.bare(repo)}, args...)...).Output()
+	if ee, ok := err.(*exec.ExitError); ok {
+		err = fmt.Errorf("%w: %s", err, strings.TrimSpace(string(ee.Stderr)))
+	}
 	return string(out), err
 }
 
