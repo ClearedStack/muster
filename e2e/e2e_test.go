@@ -64,7 +64,8 @@ type env struct {
 	// standIns names the workers that were stood in for; see E2E_STAND_IN.
 	standIns []string
 	// standInEnv is E2E_STAND_IN, read once at the start.
-	standInEnv string
+	standInEnv          string
+	trawlOriginOverride *string
 	// notes is what a stage adds to its line in the stage report.
 	notes map[string]string
 	// lastProc is the latest process started under each name.
@@ -170,7 +171,11 @@ func (e *env) onInterrupt() {
 
 // newBareEnv is an env with nothing started. E2E_STAND_IN is read here, once.
 func newBareEnv() *env {
-	return &env{notes: map[string]string{}, lastProc: map[string]*proc{}, standInEnv: os.Getenv("E2E_STAND_IN")}
+	e := &env{notes: map[string]string{}, lastProc: map[string]*proc{}, standInEnv: os.Getenv("E2E_STAND_IN")}
+	if v, ok := os.LookupEnv("E2E_TRAWL_LOCAL_TEST_ORIGIN"); ok {
+		e.trawlOriginOverride = &v
+	}
+	return e
 }
 
 func newEnv(t *testing.T) *env {

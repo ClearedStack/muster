@@ -98,9 +98,10 @@ func (e *env) spool(name string) string {
 // the find itself, with POST /v1/items as the trawl caller, which is the call
 // Trawl's own sweep makes. The real Trawl then leases the item and checks it.
 // The address is on the local page server, because that is the only kind of
-// address Sextant will fetch with SEXTANT_LOCAL_TEST_ORIGIN; Trawl refuses it
-// (host_not_public) and ends the item as rejected. That is a finding, and
-// E2E_STAND_IN=trawl lets the run go on past it.
+// address Sextant will fetch with SEXTANT_LOCAL_TEST_ORIGIN, and Trawl takes
+// it only with its own test-only TRAWL_LOCAL_TEST_ORIGIN (trawl PR #4); a
+// Trawl without that setting refuses it (host_not_public) and ends the item
+// as rejected. E2E_STAND_IN=trawl lets a run go on past that.
 func stageTrawl(e *env, t *testing.T) {
 	status, body, err := e.call("trawl", "POST", "/v1/items", map[string]any{
 		"contract": "v1",
@@ -123,13 +124,33 @@ func stageTrawl(e *env, t *testing.T) {
 		e.standInTrawl(t)
 		return
 	}
-	e.drive(t, "trawl", 40*time.Second, func() *proc {
-		return e.start("trawl", filepath.Join(e.bin, "trawl"), []string{
-			"work", "-muster-url", e.musterURL,
-			"-token-file", e.tokenFile("trawl"),
-			"-spool", e.spool("trawl"), "-drain",
-		})
-	}, e.reaches("recorded", "sextant"))
+	defer func() {
+		if t.Failed() {
+			e.mu.Lock()
+			p := e.lastProc["trawl"]
+			e.mu.Unlock()
+			if p != nil {
+				t.Log("OBSERVED: " + describeEnv(p.env, "TRAWL_LOCAL_TEST_ORIGIN") + " (the page server is " + e.pageURL + ").")
+			}
+		}
+	}()
+	e.drive(t, "trawl", 40*time.Second, e.startTrawl, e.reaches("recorded", "sextant"))
+}
+
+// startTrawl starts the real Trawl on the item, told the page server's origin
+// in TRAWL_LOCAL_TEST_ORIGIN (the same origin Sextant gets), without which it
+// refuses the local address. E2E_TRAWL_LOCAL_TEST_ORIGIN replaces the value,
+// even with an empty one: that is the control run, which must fail here.
+func (e *env) startTrawl() *proc {
+	origin := e.pageURL
+	if e.trawlOriginOverride != nil {
+		origin = *e.trawlOriginOverride
+	}
+	return e.start("trawl", filepath.Join(e.bin, "trawl"), []string{
+		"work", "-muster-url", e.musterURL,
+		"-token-file", e.tokenFile("trawl"),
+		"-spool", e.spool("trawl"), "-drain",
+	}, "TRAWL_LOCAL_TEST_ORIGIN="+origin)
 }
 
 // standInTrawl does what Trawl's work loop does to Muster for a clean item,

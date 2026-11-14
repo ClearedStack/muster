@@ -93,8 +93,10 @@ func renderReport(versions []string, lines []reportLine) string {
 
 // describeOrigin says what SEXTANT_LOCAL_TEST_ORIGIN actually was in the
 // environment a process was started with.
-func describeOrigin(env []string) string {
-	const key = "SEXTANT_LOCAL_TEST_ORIGIN"
+func describeOrigin(env []string) string { return describeEnv(env, "SEXTANT_LOCAL_TEST_ORIGIN") }
+
+// describeEnv says what key was in an environment.
+func describeEnv(env []string, key string) string {
 	for i := len(env) - 1; i >= 0; i-- {
 		if v, ok := strings.CutPrefix(env[i], key+"="); ok {
 			if v == "" {

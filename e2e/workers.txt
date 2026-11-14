@@ -2,7 +2,9 @@
 # Lines starting with # and blank lines are ignored.
 # Logbook is listed too: only its migrations/ directory is used.
 # Trawl and Shakedown: head branch of the newest open pull request on 2026-11-14.
-trawl sync/github-main-1114
+# Trawl: trawl PR #4, the test-only TRAWL_LOCAL_TEST_ORIGIN, which lets Trawl
+# record an item served from this machine. Without it the plain run stops at Trawl.
+trawl build/3-local-test-origin
 sextant build/2-assay-facts
 assay build/6-designed-tier
 countersign build/4-approve-with-waybill
