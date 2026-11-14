@@ -197,6 +197,36 @@ To change a rule on purpose, change the code, run the package's tests with `-upd
 
 All data in the tests is made up: the items, the tokens, the proposals and the addresses, which come from the ranges reserved for documentation.
 
+## End-to-end harness
+
+[`e2e/`](e2e) is the acceptance test of Phase 1. One invented item, the Wrap Rate Calculator, goes from intake to `live` through the real worker binaries, against this Muster and a real local PostgreSQL 17 with Logbook's migrations 0001 to 0010. It runs only with the build tag `e2e`, so `go test ./...` is unchanged. It uses the standard library and the pgx this repository already has, and it execs the workers; it never imports their code.
+
+You need Go 1.24 or later, `git`, and PostgreSQL 17 on `PATH` (`initdb`, `pg_ctl`; on macOS, `brew install postgresql@17` and put `$(brew --prefix postgresql@17)/bin` first on `PATH`). Reading the worker repositories needs the Plainforge port-forward on 127.0.0.1:13000 (`kubectl -n clearedstack port-forward svc/plainforge-http 13000:3000`); nothing else in the run leaves the machine.
+
+```sh
+sh e2e/build-workers.sh              # clones and builds what workers.txt names, and Muster from this checkout
+go test -tags e2e -count=1 -v ./e2e  # runs the stages and prints the stage report
+```
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `E2E_BIN_DIR` | `e2e/bin` | Where `build-workers.sh` puts the binaries (and Logbook's migrations) and where the test finds them. Use an absolute path if you set it, and the same value for both commands. |
+| `E2E_LOGBOOK_MIGRATIONS` | `$E2E_BIN_DIR/logbook/migrations` | Logbook's migrations directory. |
+| `E2E_PLAINFORGE_BASE` | `http://127.0.0.1:13000/ClearedStack` | Where `build-workers.sh` clones from. |
+| `E2E_SHOW_LOGS` | none | Set to anything to print each worker's last output after its stage, as well as when a stage fails. |
+| `E2E_STAND_IN` | none | `sextant`: the harness does Sextant's step by hand so that the later workers can be seen running. A run with this set always fails at the end: it is a diagnostic, not an acceptance pass. |
+
+[`e2e/workers.txt`](e2e/workers.txt) names one repository and branch for each worker, and for Logbook's migrations. The run, in order:
+
+1. **infrastructure.** A throwaway PostgreSQL cluster in a temporary directory on a free port, Logbook's migrations applied with the helper the SQL tests use (`internal/logbook/sql/sqltest`), Muster started with `MUSTER_AUTH=file` and one invented token for each caller, a local Git smart HTTP server (`git http-backend` behind Basic auth) with the hub repository `ClearedStack/clearedstack.com.git` and the empty `ClearedStack/wrap-rate-calculator.git`, and a local server for the invented page in [`e2e/testdata/wrap-rate/page.html`](e2e/testdata/wrap-rate/page.html), which carries a canary string.
+2. **trawl.** Trawl cannot be given a local source (its fetcher refuses loopback and private addresses), so the harness records the find with `POST /v1/items` as the `trawl` caller, and the real Trawl leases and records it.
+3. **sextant, assay.** The real workers.
+4. **countersign.** The real Countersign leases the scored item. The owner's decision is made by the harness, and only here: it runs `countersign decide <id> approve -waybill FILE` with the invented specification in [`e2e/testdata/wrap-rate-waybill.json`](e2e/testdata/wrap-rate-waybill.json) (made-up worked examples on the public idea of a wrap rate, FAR 31.203, no real rates).
+5. **waybill, moldloft, shakedown, chartroom.** The real workers. Moldloft pushes the generated repository and Chartroom writes the catalog branch over the local Git server.
+6. **outcome.** The item is `live`; `refs/heads/catalog/wrap-rate-calculator` holds the entry in `catalog/tools.json` and `main` in the hub is the commit it started at; the generated repository exists and the canary appears nowhere in it (files, names, commits); `pub.item_history` holds every change of state, by the right worker, in order; `core.integrity_check()` finds nothing wrong.
+
+The test prints a stage report. The first stage that fails stops the run and says why, with the item's state, queue, ledger and results and the worker's last output; the stages after it are reported as not reached. A worker defect or a mismatch with the contract is a finding for the owner of that worker: the harness reports it and does not hide it (a run that stands in for a worker never passes). Every process it starts is killed when the test ends (or on Ctrl-C), every port is chosen at run time, and the tokens and the Git credentials are invented fresh for each run and never printed.
+
 ## Layout
 
 | Package | What it holds |
