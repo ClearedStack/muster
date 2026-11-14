@@ -104,13 +104,13 @@ func tagName(s string) string {
 	for j < len(s) && (letter(s[j]) || s[j] >= '0' && s[j] <= '9') {
 		j++
 	}
-	return strings.ToLower(s[i:j])
+	return asciiLower(s[i:j])
 }
 
 // closing returns how much of s to skip to get past the closing tag of a
 // script or style element, or -1 if s never closes it.
 func closing(s, name string) int {
-	lower := strings.ToLower(s)
+	lower := asciiLower(s)
 	want := "</" + name
 	from := 0
 	for {
@@ -131,4 +131,18 @@ func closing(s, name string) int {
 		}
 		return after + end + 1
 	}
+}
+
+// asciiLower maps A-Z to a-z and leaves every other byte alone, so the
+// result is as long as s. strings.ToLower is not: on invalid UTF-8 and on
+// runes such as U+0130 it changes the length, which threw the offsets in
+// closing off.
+func asciiLower(s string) string {
+	b := []byte(s)
+	for i, c := range b {
+		if c >= 'A' && c <= 'Z' {
+			b[i] = c + 'a' - 'A'
+		}
+	}
+	return string(b)
 }

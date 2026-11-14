@@ -1,0 +1,221 @@
+{
+  "version": "v1",
+  "maxBytes": 4096,
+  "elements": {
+    "command.hero.mission": {
+      "ownerRepo": "clearedstack.com",
+      "editClass": "DATA",
+      "filePath": "src/data/site.ts"
+    },
+    "portal.home.hero": {
+      "ownerRepo": "clearedstack.com",
+      "editClass": "CONFIG",
+      "filePath": "src/app/guides/page.tsx"
+    },
+    "command.attention.p0": {
+      "ownerRepo": "shipkeeper",
+      "editClass": "ISSUE",
+      "filePath": "app.yaml"
+    },
+    "command.attention.p1": {
+      "ownerRepo": "clearedstack.com",
+      "editClass": "ISSUE",
+      "filePath": "deploy/muster/app.yaml"
+    },
+    "command.attention.p2": {
+      "ownerRepo": "countersign",
+      "editClass": "ISSUE",
+      "filePath": "app.yaml"
+    },
+    "decide.sandbox.test": {
+      "ownerRepo": "clearedstack.com",
+      "editClass": "ISSUE",
+      "filePath": "src/app/guides/page.tsx"
+    },
+    "app.conn.manifest": {
+      "ownerRepo": "clearedstack.com",
+      "editClass": "CONFIG",
+      "filePath": "app.yaml"
+    },
+    "app.muster.manifest": {
+      "ownerRepo": "clearedstack.com",
+      "editClass": "CONFIG",
+      "filePath": "deploy/muster/app.yaml"
+    },
+    "app.logbook.manifest": {
+      "ownerRepo": "clearedstack.com",
+      "editClass": "CONFIG",
+      "filePath": "deploy/logbook/app.yaml"
+    },
+    "app.plainforge.manifest": {
+      "ownerRepo": "plainforge",
+      "editClass": "CONFIG",
+      "filePath": "app.yaml"
+    },
+    "app.lazarette.manifest": {
+      "ownerRepo": "lazarette",
+      "editClass": "CONFIG",
+      "filePath": "app.yaml"
+    },
+    "app.keelworks.manifest": {
+      "ownerRepo": "keelworks",
+      "editClass": "CONFIG",
+      "filePath": "app.yaml"
+    },
+    "app.shipkeeper.manifest": {
+      "ownerRepo": "shipkeeper",
+      "editClass": "CONFIG",
+      "filePath": "app.yaml"
+    },
+    "worker.trawl.manifest": {
+      "ownerRepo": "trawl",
+      "editClass": "CONFIG",
+      "filePath": "app.yaml"
+    },
+    "worker.sextant.manifest": {
+      "ownerRepo": "sextant",
+      "editClass": "CONFIG",
+      "filePath": "app.yaml"
+    },
+    "worker.assay.manifest": {
+      "ownerRepo": "assay",
+      "editClass": "CONFIG",
+      "filePath": "app.yaml"
+    },
+    "worker.countersign.manifest": {
+      "ownerRepo": "countersign",
+      "editClass": "CONFIG",
+      "filePath": "app.yaml"
+    },
+    "worker.waybill.manifest": {
+      "ownerRepo": "waybill",
+      "editClass": "CONFIG",
+      "filePath": "app.yaml"
+    },
+    "worker.moldloft.manifest": {
+      "ownerRepo": "moldloft",
+      "editClass": "CONFIG",
+      "filePath": "app.yaml"
+    },
+    "worker.shakedown.manifest": {
+      "ownerRepo": "shakedown",
+      "editClass": "CONFIG",
+      "filePath": "app.yaml"
+    },
+    "worker.chartroom.manifest": {
+      "ownerRepo": "chartroom",
+      "editClass": "CONFIG",
+      "filePath": "app.yaml"
+    },
+    "worker.tidegauge.manifest": {
+      "ownerRepo": "tidegauge",
+      "editClass": "CONFIG",
+      "filePath": "app.yaml"
+    },
+    "worker.bellbuoy.manifest": {
+      "ownerRepo": "bellbuoy",
+      "editClass": "CONFIG",
+      "filePath": "app.yaml"
+    },
+    "worker.trawl.role": {
+      "ownerRepo": "trawl",
+      "editClass": "CONFIG",
+      "filePath": "app.yaml"
+    },
+    "worker.sextant.role": {
+      "ownerRepo": "sextant",
+      "editClass": "CONFIG",
+      "filePath": "app.yaml"
+    },
+    "worker.assay.role": {
+      "ownerRepo": "assay",
+      "editClass": "CONFIG",
+      "filePath": "app.yaml"
+    },
+    "worker.countersign.role": {
+      "ownerRepo": "countersign",
+      "editClass": "CONFIG",
+      "filePath": "app.yaml"
+    },
+    "worker.waybill.role": {
+      "ownerRepo": "waybill",
+      "editClass": "CONFIG",
+      "filePath": "app.yaml"
+    },
+    "worker.moldloft.role": {
+      "ownerRepo": "moldloft",
+      "editClass": "CONFIG",
+      "filePath": "app.yaml"
+    },
+    "worker.shakedown.role": {
+      "ownerRepo": "shakedown",
+      "editClass": "CONFIG",
+      "filePath": "app.yaml"
+    },
+    "worker.chartroom.role": {
+      "ownerRepo": "chartroom",
+      "editClass": "CONFIG",
+      "filePath": "app.yaml"
+    },
+    "worker.tidegauge.role": {
+      "ownerRepo": "tidegauge",
+      "editClass": "CONFIG",
+      "filePath": "app.yaml"
+    },
+    "worker.bellbuoy.role": {
+      "ownerRepo": "bellbuoy",
+      "editClass": "CONFIG",
+      "filePath": "app.yaml"
+    },
+    "pipeline.trawl": {
+      "ownerRepo": "trawl",
+      "editClass": "ISSUE",
+      "filePath": "app.yaml"
+    },
+    "pipeline.sextant": {
+      "ownerRepo": "sextant",
+      "editClass": "ISSUE",
+      "filePath": "app.yaml"
+    },
+    "pipeline.assay": {
+      "ownerRepo": "assay",
+      "editClass": "ISSUE",
+      "filePath": "app.yaml"
+    },
+    "pipeline.countersign": {
+      "ownerRepo": "countersign",
+      "editClass": "ISSUE",
+      "filePath": "app.yaml"
+    },
+    "pipeline.waybill": {
+      "ownerRepo": "waybill",
+      "editClass": "ISSUE",
+      "filePath": "app.yaml"
+    },
+    "pipeline.moldloft": {
+      "ownerRepo": "moldloft",
+      "editClass": "ISSUE",
+      "filePath": "app.yaml"
+    },
+    "pipeline.shakedown": {
+      "ownerRepo": "shakedown",
+      "editClass": "ISSUE",
+      "filePath": "app.yaml"
+    },
+    "pipeline.chartroom": {
+      "ownerRepo": "chartroom",
+      "editClass": "ISSUE",
+      "filePath": "app.yaml"
+    },
+    "pipeline.tidegauge": {
+      "ownerRepo": "tidegauge",
+      "editClass": "ISSUE",
+      "filePath": "app.yaml"
+    },
+    "pipeline.bellbuoy": {
+      "ownerRepo": "bellbuoy",
+      "editClass": "ISSUE",
+      "filePath": "app.yaml"
+    }
+  }
+}

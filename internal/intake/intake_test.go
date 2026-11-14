@@ -67,6 +67,23 @@ func TestStripLeavesNoTag(t *testing.T) {
 	build("", 4)
 }
 
+func TestStripScriptAndStyleByteOffsets(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"invalid UTF-8 inside style", "<style>\xff\xfe</style>kept", "kept"},
+		{"U+023A inside style", "<style>ȺȺȺ</STYLE>kept", "kept"},
+		{"U+0130 inside script", "<script>İİ</ScRiPt>after", "after"},
+	}
+	for _, tc := range cases {
+		if got := Strip(tc.in); got != tc.want {
+			t.Errorf("%s: Strip(%q) = %q, want %q", tc.name, tc.in, got, tc.want)
+		}
+	}
+}
+
 func TestProofOfWorkSavedExamples(t *testing.T) {
 	var file struct {
 		Cases []struct {
@@ -117,6 +134,47 @@ func TestSourceKeySavedExamples(t *testing.T) {
 		if got := SourceKey([]byte(file.Secret), c.Day, addr); got != c.Key {
 			t.Errorf("%s: key = %s, want %s", c.Name, got, c.Key)
 		}
+	}
+}
+
+// The map Conn ships (clearedstack.com, src/data/ownership_map.json) must
+// parse as it is.
+func TestOwnershipConnMap(t *testing.T) {
+	data, err := os.ReadFile("testdata/ownership_map.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := ParseOwnership(data)
+	if err != nil {
+		t.Fatalf("Conn's map was refused: %v", err)
+	}
+	if len(got) != 43 {
+		t.Fatalf("Conn's map has %d elements, want 43", len(got))
+	}
+	want := Owner{Repository: "clearedstack.com", File: "src/data/site.ts", Kind: "DATA"}
+	if got["command.hero.mission"] != want {
+		t.Fatalf("command.hero.mission = %+v, want %+v", got["command.hero.mission"], want)
+	}
+}
+
+func TestOwnershipConnRefusals(t *testing.T) {
+	row := `"elements":{"a.b":{"ownerRepo":"sextant","filePath":"f","editClass":"DATA"}}`
+	bad := map[string]string{
+		"both repository names":   `{"elements":{"a.b":{"repository":"sextant","ownerRepo":"sextant","file":"f","kind":"DATA"}}}`,
+		"both file names":         `{"elements":{"a.b":{"repository":"sextant","file":"f","filePath":"f","kind":"DATA"}}}`,
+		"both kind names":         `{"elements":{"a.b":{"repository":"sextant","file":"f","kind":"DATA","editClass":"DATA"}}}`,
+		"an unknown version":      `{"version":"v2",` + row + `}`,
+		"maxBytes zero":           `{"maxBytes":0,` + row + `}`,
+		"maxBytes above the cap":  `{"maxBytes":4097,` + row + `}`,
+		"an unknown envelope key": `{"repos":{},` + row + `}`,
+	}
+	for name, in := range bad {
+		if _, err := ParseOwnership([]byte(in)); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+	if _, err := ParseOwnership([]byte(`{"version":"v1","maxBytes":4096,` + row + `}`)); err != nil {
+		t.Errorf("a good Conn envelope was refused: %v", err)
 	}
 }
 

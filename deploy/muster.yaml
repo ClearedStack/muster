@@ -63,6 +63,8 @@ spec:
       labels:
         app.kubernetes.io/name: muster
     spec:
+      # Logbook's deploy creates this class; it must exist before this pod can.
+      priorityClassName: clearedstack-high
       serviceAccountName: muster
       # Muster presents its own token when it asks whose token a caller sent.
       automountServiceAccountToken: true

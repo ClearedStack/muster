@@ -5,9 +5,11 @@
 #      Shipkeeper, on 8080.
 # Out: Logbook on 5432, and the cluster's name service to find it.
 #
-# Muster also calls the cluster's API, to ask whose token a caller presented.
-# A NetworkPolicy cannot name the API server; the rule for it depends on the
-# cluster and is added by whoever deploys Muster.
+# Muster also calls the cluster's API, to ask whose token a caller presented
+# (TokenReview, SPEC 5.2). A NetworkPolicy cannot name the API server, so the
+# last egress rule allows TCP 6443 to kube-system and to the control-plane
+# node addresses of this cluster (the same rule the cluster carried by hand
+# as muster-to-kube-apiserver).
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -50,3 +52,18 @@ spec:
           port: 53
         - protocol: TCP
           port: 53
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+        - ipBlock:
+            cidr: 192.168.8.108/32
+        - ipBlock:
+            cidr: 192.168.8.187/32
+        - ipBlock:
+            cidr: 192.168.8.202/32
+        - ipBlock:
+            cidr: 192.168.8.200/32
+      ports:
+        - protocol: TCP
+          port: 6443
