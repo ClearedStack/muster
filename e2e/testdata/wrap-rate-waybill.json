@@ -1,0 +1,100 @@
+{
+  "contract_version": "v1",
+  "determination": {
+    "decision": "build"
+  },
+  "source": {
+    "product": "Brightledger Wrap Planner",
+    "vendor": "Brightledger Fictional Tools"
+  },
+  "title": "wrap rate from a direct labor rate and three burden percentages",
+  "slug": "wrap-rate-calculator",
+  "authority": [
+    {
+      "id": "far_31_203",
+      "source": "FAR",
+      "citation": "FAR 31.203",
+      "title": "Indirect costs: fringe, overhead and G&A burden on a labor rate (made-up worked examples)",
+      "url": "https://www.acquisition.gov/far/subpart-31.2"
+    }
+  ],
+  "tool_type": "calculator",
+  "tool": {
+    "inputs": [
+      {
+        "name": "direct_rate",
+        "type": "number",
+        "unit": "USD",
+        "min": 0,
+        "max": 1000
+      },
+      {
+        "name": "fringe_pct",
+        "type": "number",
+        "unit": "percent",
+        "min": 0,
+        "max": 100
+      },
+      {
+        "name": "overhead_pct",
+        "type": "number",
+        "unit": "percent",
+        "min": 0,
+        "max": 300
+      },
+      {
+        "name": "ga_pct",
+        "type": "number",
+        "unit": "percent",
+        "min": 0,
+        "max": 100
+      }
+    ],
+    "outputs": [
+      {
+        "name": "wrap_rate",
+        "type": "number",
+        "unit": "USD",
+        "formula": "direct_rate*(1+fringe_pct/100)*(1+overhead_pct/100)*(1+ga_pct/100)"
+      }
+    ],
+    "worked_examples": [
+      {
+        "authority": "far_31_203",
+        "inputs": {
+          "direct_rate": 40,
+          "fringe_pct": 30,
+          "overhead_pct": 50,
+          "ga_pct": 10
+        },
+        "expected": {
+          "wrap_rate": 85.8
+        }
+      },
+      {
+        "authority": "far_31_203",
+        "inputs": {
+          "direct_rate": 25.5,
+          "fringe_pct": 0,
+          "overhead_pct": 0,
+          "ga_pct": 0
+        },
+        "expected": {
+          "wrap_rate": 25.5
+        }
+      },
+      {
+        "authority": "far_31_203",
+        "inputs": {
+          "direct_rate": 100,
+          "fringe_pct": 10,
+          "overhead_pct": 10,
+          "ga_pct": 10
+        },
+        "expected": {
+          "wrap_rate": 133.1
+        }
+      }
+    ]
+  }
+}
